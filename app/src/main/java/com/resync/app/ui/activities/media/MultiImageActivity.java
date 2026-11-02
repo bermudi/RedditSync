@@ -199,7 +199,18 @@ public class MultiImageActivity extends AbstractImageActivity {
             if (MultiImageActivity.this.getActivity() == null) {
                 return;
             }
-            MultiImageActivity.this.showLoadError();
+            // Name the actual failure (HTTP status + body head, or the parse exception) so a
+            // broken album can be diagnosed from the toast / logcat instead of a fixed string.
+            String reason = null;
+            if (volleyError != null && volleyError.networkResponse != null) {
+                String body = new String(volleyError.networkResponse.data);
+                reason = "HTTP " + volleyError.networkResponse.statusCode + ": "
+                        + body.substring(0, Math.min(100, body.length()));
+            } else if (volleyError != null && volleyError.getMessage() != null) {
+                reason = volleyError.getMessage();
+            }
+            android.util.Log.i("MultiImageActivity", "gallery load error: " + reason);
+            MultiImageActivity.this.showErrorAndFinish(reason == null ? "Error loading album" : "Error loading album: " + reason);
         }
     }
 

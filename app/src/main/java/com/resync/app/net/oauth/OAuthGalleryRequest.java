@@ -35,51 +35,67 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
 
     @Override // com.android.volley.Request
     public Response<Gallery> parseNetworkResponse(NetworkResponse networkResponse) {
+        String str = new String(networkResponse.data);
         try {
-            String str = new String(networkResponse.data);
-            Logger.verbose(str);
             // A thread replies with [postListing, commentsListing]; the post is first.
             JSONObject jSONObject = new JSONArray(str).getJSONObject(0).getJSONObject("data").getJSONArray("children").getJSONObject(0).getJSONObject("data");
-            JSONObject jSONObject2 = jSONObject.getJSONObject("media_metadata");
-            JSONArray jSONArray = jSONObject.getJSONObject("gallery_data").getJSONArray("items");
+            JSONObject jSONObject2 = jSONObject.optJSONObject("media_metadata");
+            JSONObject galleryData = jSONObject.optJSONObject("gallery_data");
+            JSONArray jSONArray = galleryData == null ? null : galleryData.optJSONArray("items");
+            if (jSONObject2 == null || jSONArray == null || jSONArray.length() == 0) {
+                return Response.error(new VolleyError("post has no gallery (is_gallery="
+                        + jSONObject.optBoolean("is_gallery") + ", crosspost="
+                        + jSONObject.has("crosspost_parent_list") + ")"));
+            }
             Gallery gallery = new Gallery(jSONArray.length());
             for (int index = 0; index < jSONArray.length(); index++) {
-                JSONObject jSONObject3 = jSONObject2.getJSONObject(jSONArray.getJSONObject(index).getString("media_id"));
-                if (jSONObject3.has("s")) {
-                    JSONObject jSONObject4 = jSONObject3.getJSONObject("s");
-                    if (jSONObject4.has("mp4")) {
-                        gallery.urls[index] = WebsafeUtils.unescapeHtml(jSONObject4.getString("mp4"));
+                // A deleted image leaves its id in gallery_data but absent from media_metadata;
+                // reddit's web client shows a gap there, so blank the slot instead of failing
+                // the whole album.
+                JSONObject meta = jSONObject2.optJSONObject(jSONArray.getJSONObject(index).optString("media_id"));
+                JSONObject s = meta == null ? null : meta.optJSONObject("s");
+                if (s != null) {
+                    if (s.has("mp4")) {
+                        gallery.urls[index] = WebsafeUtils.unescapeHtml(s.getString("mp4"));
+                    } else if (s.has("u")) {
+                        gallery.urls[index] = WebsafeUtils.unescapeHtml(s.getString("u"));
+                    } else if (s.has("gif")) {
+                        gallery.urls[index] = WebsafeUtils.unescapeHtml(s.getString("gif"));
                     } else {
-                        gallery.urls[index] = WebsafeUtils.unescapeHtml(jSONObject4.getString("u"));
+                        gallery.urls[index] = "";
                     }
                     try {
-                        gallery.thumbnails[index] = WebsafeUtils.unescapeHtml(jSONObject3.getJSONArray("p").getJSONObject(0).getString("u"));
+                        gallery.thumbnails[index] = WebsafeUtils.unescapeHtml(meta.getJSONArray("p").getJSONObject(0).getString("u"));
                     } catch (Exception unused) {
                         gallery.thumbnails[index] = gallery.urls[index];
                     }
-                    StringBuilder sb2 = new StringBuilder();
-                    String strOptString = jSONArray.getJSONObject(index).optString("caption");
-                    if (StringUtils.isNotEmpty(strOptString)) {
-                        sb2.append(strOptString);
-                        sb2.append("\n\n");
-                    }
-                    String strOptString2 = jSONArray.getJSONObject(index).optString("outbound_url");
-                    if (StringUtils.isNotEmpty(strOptString2)) {
-                        sb2.append(strOptString2);
-                    }
-                    gallery.captions[index] = sb2.toString();
                 } else {
                     gallery.urls[index] = "";
                     gallery.thumbnails[index] = "";
-                    gallery.captions[index] = "";
                 }
+                StringBuilder sb2 = new StringBuilder();
+                String strOptString = jSONArray.getJSONObject(index).optString("caption");
+                if (StringUtils.isNotEmpty(strOptString)) {
+                    sb2.append(strOptString);
+                    sb2.append("\n\n");
+                }
+                String strOptString2 = jSONArray.getJSONObject(index).optString("outbound_url");
+                if (StringUtils.isNotEmpty(strOptString2)) {
+                    sb2.append(strOptString2);
+                }
+                gallery.captions[index] = sb2.toString();
             }
             // Where the viewer last left this album (used to ride in the cached reply body).
             gallery.position = GalleryPositions.get(getUrl());
             return Response.success(gallery, CustomHttpHeaderParser.parseCacheEntry(networkResponse, DateUtils.MILLIS_PER_HOUR));
         } catch (Exception e) {
-            Logger.logException(e);
-            return Response.error(new VolleyError("Could not load gallery"));
+            android.util.Log.i("OAuthGalleryRequest",
+                    "gallery parse failed: " + e + " body=" + head(str));
+            return Response.error(new VolleyError("parse failed: " + e + "; body=" + head(str)));
         }
+    }
+
+    private static String head(String str) {
+        return str.substring(0, Math.min(100, str.length())).replace('\n', ' ');
     }
 }

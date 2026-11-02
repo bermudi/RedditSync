@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   loading, retries once through the full home page when reddit's edge answers with a bot
   challenge (common from VPN exit IPs), and if login still fails the message names the actual
   reason (HTTP status + response snippet, or the fetch error) instead of the generic string.
+- **Albums with a deleted image failing entirely.** A picture removed from a gallery leaves its
+  id in `gallery_data` but is gone from `media_metadata`; the strict lookup aborted the whole
+  album for it. The slot is now left blank like reddit's web client, and gif-only entries
+  (no `u`/`mp4`) resolve through their `gif` source. A failing album now also names the actual
+  reason (HTTP status + response snippet, or the parse error) in the toast instead of a fixed
+  "Error loading album".
 - **RedGifs token rejection retries.** A RedGifs request turned away with a stale token now
   re-runs once with a fresh token instead of surfacing an error.
 - **Threads failing to render when the text contains a `$`.** Matched text handed back as a regex
