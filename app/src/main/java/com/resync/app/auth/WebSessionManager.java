@@ -83,13 +83,16 @@ public final class WebSessionManager {
         final boolean withAuth;
         /** When set, navigate to {@link #url} and evaluate this JS instead of fetch()-ing. */
         final String evalJs;
+        /** Selector the loaded page must contain before {@link #evalJs} runs (hydration guard). */
+        final String evalWaitFor;
         boolean retried;
         FetchJob(String url, String accept, boolean withAuth, FetchCallback callback) {
-            this(url, accept, withAuth, null, callback);
+            this(url, accept, withAuth, null, null, callback);
         }
-        FetchJob(String url, String accept, boolean withAuth, String evalJs, FetchCallback callback) {
+        FetchJob(String url, String accept, boolean withAuth, String evalJs, String evalWaitFor,
+                 FetchCallback callback) {
             this.url = url; this.accept = accept; this.withAuth = withAuth;
-            this.evalJs = evalJs; this.callback = callback;
+            this.evalJs = evalJs; this.evalWaitFor = evalWaitFor; this.callback = callback;
         }
     }
     private final java.util.ArrayDeque<FetchJob> fetchQueue = new java.util.ArrayDeque<>();
@@ -388,14 +391,15 @@ public final class WebSessionManager {
 
     /**
      * Navigates the WebView to {@code url} (a real page load — passes the edge that walls
-     * fetch()-shaped requests), waits for it to finish, then evaluates {@code js} in the page and
-     * returns the JSON-encoded result string. This is the escape hatch for endpoints whose JSON
-     * is gone entirely: load the server-rendered page, extract the data from its DOM.
+     * fetch()-shaped requests), waits for {@code waitForSelector} to appear (server-rendered
+     * content; guards against the cache serving a mid-hydration SPA shell), then evaluates
+     * {@code js} in the page and returns its stringified result via the callback's body.
      */
-    public void evalOnPage(final String url, final String js, final FetchCallback callback) {
+    public void evalOnPage(final String url, final String js, final String waitForSelector,
+                           final FetchCallback callback) {
         main.post(new Runnable() {
             @Override public void run() {
-                fetchQueue.add(new FetchJob(url, null, false, js, callback));
+                fetchQueue.add(new FetchJob(url, null, false, js, waitForSelector, callback));
                 pumpFetchQueue();
             }
         });
@@ -455,12 +459,17 @@ public final class WebSessionManager {
 
     private void runProxyFetch(final FetchJob job) {
         if (job.evalJs != null) {
-            webView.evaluateJavascript("(function(){" + job.evalJs + "})()",
-                    new android.webkit.ValueCallback<String>() {
-                        @Override public void onReceiveValue(String v) {
-                            finishProxyJob(job, 200, v == null ? "null" : v, null);
-                        }
-                    });
+            // The result rides the bridge (the eval may poll asynchronously inside the page).
+            // Body must be a string — callers return JSON.stringify(...).
+            String wait = job.evalWaitFor == null ? "" : jsEscape(job.evalWaitFor);
+            String js =
+                "(function(){var t0=Date.now();(function poll(){"
+              + "try{if(!" + (wait.isEmpty() ? "0" : "document.querySelector('" + wait + "')")
+              + " && Date.now()-t0<10000){setTimeout(poll,300);return;}"
+              + "var r=(function(){" + job.evalJs + "})();"
+              + "SyncTokenBridge.onFetch(200,typeof r==='undefined'?'':String(r));"
+              + "}catch(e){SyncTokenBridge.onFetch(200,'EVALERR '+e);}})();})();";
+            webView.evaluateJavascript(js, null);
             proxyTimeout = new Runnable() {
                 @Override public void run() {
                     finishProxyJob(job, 0, null, "eval timeout (" + FETCH_TIMEOUT_MS + "ms)");

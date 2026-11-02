@@ -37,14 +37,15 @@ public class DebugFetchReceiver extends BroadcastReceiver {
         WebSessionManager.FetchCallback cb = new WebSessionManager.FetchCallback() {
             @Override public void onFetched(int status, String body) {
                 android.util.Log.i("DebugFetch", "RESULT " + status + " len=" + body.length()
-                        + " head=" + body.substring(0, Math.min(600, body.length())).replace('\n', ' '));
+                        + " head=" + body.substring(0, Math.min(1200, body.length())).replace('\n', ' '));
             }
             @Override public void onError(String reason) {
                 android.util.Log.i("DebugFetch", "ERROR " + reason);
             }
         };
         if (eval != null) {
-            mgr.evalOnPage(url, eval, cb);
+            String wait = intent.getStringExtra("wait");
+            mgr.evalOnPage(url, eval, wait, cb);
         } else {
             mgr.fetchViaWebView(url, accept, auth, cb);
         }
