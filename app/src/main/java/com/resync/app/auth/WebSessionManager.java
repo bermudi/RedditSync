@@ -460,17 +460,17 @@ public final class WebSessionManager {
     private void runProxyFetch(final FetchJob job) {
         if (job.evalJs != null) {
             // The result rides the bridge (the eval may poll asynchronously inside the page).
-            // Body must be a string — callers return JSON.stringify(...). The user JS is passed
-            // as a quoted string and compiled with new Function so a syntax error in it surfaces
-            // as a delivered EVALERR instead of killing the whole script silently (a compile
-            // failure in evaluateJavascript calls no callback at all and looks like a timeout).
+            // Body must be a string — callers return JSON.stringify(...). The user JS is inlined
+            // directly: reddit's page CSP forbids unsafe-eval, so new Function()/eval() throw
+            // EvalError and are unusable here. (A syntax error in the user JS therefore kills the
+            // whole script silently — visible as an eval timeout — so scrape JS must be validated
+            // through the rig before shipping.)
             String wait = job.evalWaitFor == null ? "" : jsEscape(job.evalWaitFor);
             String js =
                 "(function(){var t0=Date.now();(function poll(){"
               + "try{if(!" + (wait.isEmpty() ? "0" : "document.querySelector('" + wait + "')")
               + " && Date.now()-t0<10000){setTimeout(poll,300);return;}"
-              + "var r='';try{r=(new Function(" + JSONObject.quote(job.evalJs) + "))();}"
-              + "catch(e){SyncTokenBridge.onFetch(200,'EVALERR '+e);return;}"
+              + "var r=(function(){" + job.evalJs + "})();"
               + "SyncTokenBridge.onFetch(200,typeof r==='undefined'?'':String(r));"
               + "}catch(e){SyncTokenBridge.onFetch(200,'EVALERR '+e);}})();})();";
             webView.evaluateJavascript(js, null);
