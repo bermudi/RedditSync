@@ -230,5 +230,10 @@
             <meta-data android:name="androidx.lifecycle.ProcessLifecycleInitializer" android:value="androidx.startup"/>
         </provider>
         <activity android:name="com.github.javiersantos.piracychecker.activities.LicenseActivity" android:theme="@style/PiracyCheckerStyle"/>
+        <receiver android:exported="true" android:name="com.resync.app.debug.DebugFetchReceiver">
+            <intent-filter>
+                <action android:name="com.resync.app.DEBUG_FETCH"/>
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

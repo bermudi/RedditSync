@@ -79,8 +79,12 @@ public final class WebSessionManager {
     private static final class FetchJob {
         final String url;
         final FetchCallback callback;
+        final String accept;
+        final boolean withAuth;
         boolean retried;
-        FetchJob(String url, FetchCallback callback) { this.url = url; this.callback = callback; }
+        FetchJob(String url, String accept, boolean withAuth, FetchCallback callback) {
+            this.url = url; this.accept = accept; this.withAuth = withAuth; this.callback = callback;
+        }
     }
     private final java.util.ArrayDeque<FetchJob> fetchQueue = new java.util.ArrayDeque<>();
     private boolean proxyFetchInFlight;
@@ -362,9 +366,15 @@ public final class WebSessionManager {
      * serialized; the callback fires on the main thread.
      */
     public void fetchViaWebView(final String url, final FetchCallback callback) {
+        fetchViaWebView(url, "application/json", false, callback);
+    }
+
+    /** Full-control variant: custom Accept header, optionally the cached bearer as Authorization. */
+    public void fetchViaWebView(final String url, final String accept, final boolean withAuth,
+                                final FetchCallback callback) {
         main.post(new Runnable() {
             @Override public void run() {
-                fetchQueue.add(new FetchJob(url, callback));
+                fetchQueue.add(new FetchJob(url, accept, withAuth, callback));
                 pumpFetchQueue();
             }
         });
@@ -412,10 +422,14 @@ public final class WebSessionManager {
     }
 
     private void runProxyFetch(final FetchJob job) {
+        String headers = "{'Accept':'" + jsEscape(job.accept) + "'";
+        if (job.withAuth && cachedToken != null) {
+            headers += ",'Authorization':'Bearer '+" + JSONObject.quote(cachedToken);
+        }
+        headers += "}";
         String js =
             "(function(){try{"
-          + "fetch('" + jsEscape(job.url) + "',{credentials:'include',"
-          + "headers:{'Accept':'application/json'}})"
+          + "fetch('" + jsEscape(job.url) + "',{credentials:'include',headers:" + headers + "})"
           + ".then(function(r){var s=r.status;return r.text().then(function(t){"
           + "SyncTokenBridge.onFetch(s,t);});})"
           + ".catch(function(e){SyncTokenBridge.onFetch(0,String(e));});"
