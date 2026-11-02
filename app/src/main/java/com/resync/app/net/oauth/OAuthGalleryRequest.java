@@ -59,7 +59,7 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
           + "urls.forEach(function(u,i){var id='m'+i;items.push({media_id:id,caption:''});"
           + "  mm[id]={m:'image',s:{u:u},p:[{u:u,y:0,x:0}]};});"
           + "return JSON.stringify([{data:{children:[{data:{is_gallery:true,"
-          + "  gallery_data:{items:items},media_metadata:mm}}}]}}]);";
+          + "  gallery_data:{items:items},media_metadata:mm}}]}}]);";
         return new String[]{page, "shreddit-post", js};
     }
 
