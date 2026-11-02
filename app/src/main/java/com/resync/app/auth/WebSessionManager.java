@@ -43,6 +43,11 @@ public final class WebSessionManager {
     private static final String TOKEN_URL = "https://www.reddit.com/svc/shreddit/token";
     /** Refresh when the cached token is within this many ms of expiry. */
     private static final long EXPIRY_SKEW_MS = 5 * 60 * 1000L;
+    // The minted bearer survives app restarts here (the in-memory cache dies with the process,
+    // and every cold start re-minting means riding reddit's edge bot-challenge each time).
+    private static final String PREFS_NAME = "web_session";
+    private static final String PREF_TOKEN = "bearer_token";
+    private static final String PREF_EXPIRY = "bearer_expiry";
 
     private static WebSessionManager instance;
 
@@ -100,10 +105,40 @@ public final class WebSessionManager {
 
     /** Returns a non-expired cached token without any network, or null. */
     public String getCachedToken() {
+        if (cachedToken == null) {
+            restorePersistedToken();
+        }
         if (cachedToken != null && System.currentTimeMillis() < cachedExpiryMs - EXPIRY_SKEW_MS) {
             return cachedToken;
         }
         return null;
+    }
+
+    /** Loads the last minted token from prefs; the volatile copy is gone after process death. */
+    private void restorePersistedToken() {
+        try {
+            android.content.SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, 0);
+            String token = prefs.getString(PREF_TOKEN, null);
+            long expiry = prefs.getLong(PREF_EXPIRY, 0L);
+            if (token != null && !token.isEmpty()
+                    && System.currentTimeMillis() < expiry - EXPIRY_SKEW_MS) {
+                cachedToken = token;
+                cachedExpiryMs = expiry;
+            }
+        } catch (Exception e) {
+            android.util.Log.i(TAG, "restorePersistedToken failed: " + e);
+        }
+    }
+
+    private void persistToken(String jwt, long expiryMs) {
+        try {
+            appContext.getSharedPreferences(PREFS_NAME, 0).edit()
+                    .putString(PREF_TOKEN, jwt)
+                    .putLong(PREF_EXPIRY, expiryMs)
+                    .apply();
+        } catch (Exception e) {
+            android.util.Log.i(TAG, "persistToken failed: " + e);
+        }
     }
 
     /**
@@ -207,25 +242,22 @@ public final class WebSessionManager {
 
     /**
      * Runs the token fetch inside the WebView. We must be on a reddit.com origin for the same-origin
-     * POST + cookie attach to work, so we load a reddit.com page first, wait for that page to finish
-     * loading AND the CSRF cookie to be present, then fetch.
+     * POST + cookie attach to work, so we load the home page, wait for it to finish loading AND the
+     * CSRF cookie to be present, then fetch.
      *
-     * <p>Logged-IN: the session cookies already exist, so a tiny same-origin page (robots.txt) is
-     * enough and the fetch can fire as soon as it loads.
-     *
-     * <p>Logged-OUT (anonymous): we load the home page so reddit's edge sets the {@code loid}+
-     * {@code csrf_token} cookies AND runs its JS bot-challenge; we wait for {@code csrf_token}.
-     *
-     * <p>Retries (attempt &gt; 0, or any failure) always load the full home page: if the first fetch
-     * was answered by an edge bot-check (403/challenge HTML — e.g. behind a VPN exit), loading a
-     * real page lets the WebView solve the challenge before we fetch again.
+     * <p>The full home page — never a bare resource — because reddit's edge serves its 403
+     * bot-challenge to plain fetches, and only a real page executes the challenge JS that clears
+     * it (logged-in or not). Anonymous mints additionally need the page for the {@code loid}+
+     * {@code csrf_token} cookies.
      */
     private void mintToken(int attempt) {
-        boolean anonymous = !hasSession();
-        boolean fullPage = anonymous || attempt > 0;
+        // Always the full home page. Reddit's edge now serves its 403 bot-challenge even to
+        // logged-in sessions, and a bare robots.txt page runs no JS — the challenge can never
+        // clear there (observed live: fast path 403, home-page retry minted ~2s later). The
+        // home page executes the challenge, so it is the only reliable origin for the fetch.
         pageLoaded = false;
-        webView.loadUrl(fullPage ? "https://www.reddit.com/" : "https://www.reddit.com/robots.txt");
-        waitForPageThenFetch(System.currentTimeMillis(), fullPage ? 20000L : 8000L);
+        webView.loadUrl("https://www.reddit.com/");
+        waitForPageThenFetch(System.currentTimeMillis(), 20000L);
     }
 
     /**
@@ -299,6 +331,7 @@ public final class WebSessionManager {
                 if (jwt != null && !jwt.isEmpty()) {
                     cachedToken = jwt;
                     cachedExpiryMs = expires > 0 ? expires : System.currentTimeMillis() + 23 * 60 * 60 * 1000L;
+                    persistToken(jwt, cachedExpiryMs);
                     android.util.Log.i(TAG, "Minted web-session token, expires " + cachedExpiryMs);
                 } else {
                     reason = "HTTP " + status + ": " + snippet(responseBody);
@@ -390,6 +423,10 @@ public final class WebSessionManager {
     public void invalidate() {
         cachedToken = null;
         cachedExpiryMs = 0L;
+        try {
+            appContext.getSharedPreferences(PREFS_NAME, 0).edit().clear().apply();
+        } catch (Exception unused) {
+        }
     }
 
     /** Full logout: clear token + reddit.com cookies + web storage (both layers, then flush). */

@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (no `u`/`mp4`) resolve through their `gif` source. A failing album now also names the actual
   reason (HTTP status + response snippet, or the parse error) in the toast instead of a fixed
   "Error loading album".
+- **The app failing app-wide after a restart ("Error loading page" on everything).** The
+  minted API token lived only in memory, so every cold start had to re-mint it — and reddit's
+  edge has begun answering the token fetch with its 403 bot-challenge even for logged-in
+  sessions, which could fail the mint and with it every request. The token is now persisted
+  and survives restarts (re-mint ~once a day), and the mint always loads the full home page —
+  the only page that executes the challenge JS that clears the block (observed live: fetch
+  from a bare page 403s, home-page fetch mints within seconds).
 - **RedGifs token rejection retries.** A RedGifs request turned away with a stale token now
   re-runs once with a fresh token instead of surfacing an error.
 - **Threads failing to render when the text contains a `$`.** Matched text handed back as a regex
