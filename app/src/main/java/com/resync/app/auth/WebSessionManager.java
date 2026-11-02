@@ -79,6 +79,7 @@ public final class WebSessionManager {
     private static final class FetchJob {
         final String url;
         final FetchCallback callback;
+        boolean retried;
         FetchJob(String url, FetchCallback callback) { this.url = url; this.callback = callback; }
     }
     private final java.util.ArrayDeque<FetchJob> fetchQueue = new java.util.ArrayDeque<>();
@@ -121,6 +122,11 @@ public final class WebSessionManager {
         if (uri == null) return false;
         String host = uri.getHost();
         return host != null && (host.equals("reddit.com") || host.endsWith(".reddit.com"));
+    }
+
+    /** True for the edge bot-challenge interstitial URLs (…?solution=…&js_challenge=…). */
+    private static boolean isChallengeUrl(String url) {
+        return url != null && (url.contains("js_challenge=") || url.contains("solution="));
     }
 
     /** True if a reddit.com web session cookie is present (i.e. the user has logged in). */
@@ -255,8 +261,11 @@ public final class WebSessionManager {
             @Override
             public void onPageFinished(WebView view, String url) {
                 // The token fetch must run from a loaded reddit.com document; about:blank is a
-                // null origin and the same-origin fetch fails CORS from there.
-                if (isRedditHost(Uri.parse(url))) {
+                // null origin and the same-origin fetch fails CORS from there. The edge bot
+                // challenge redirects to ...?solution=…&js_challenge=… — still a reddit.com URL,
+                // so a naive "any page finished" flag would fire on the UNCLEARED interstitial
+                // and every fetch from it 403s. Only a page outside the challenge flow counts.
+                if (isRedditHost(Uri.parse(url)) && !isChallengeUrl(url)) {
                     pageLoaded = true;
                 }
             }
@@ -365,55 +374,69 @@ public final class WebSessionManager {
         if (proxyFetchInFlight || fetchQueue.isEmpty()) {
             return;
         }
-        final FetchJob job = fetchQueue.poll();
         proxyFetchInFlight = true;
-        activeJob = job;
+        activeJob = fetchQueue.poll();
+        ensurePageThenFetch(activeJob);
+    }
+
+    /**
+     * A cleared reddit.com page (not the challenge interstitial) with the csrf cookie present —
+     * the same bar the token mint waits for. Fetching from an uncleared page 403s.
+     */
+    private boolean pageReady() {
+        if (!pageLoaded) {
+            return false;
+        }
+        String cookies = CookieManager.getInstance().getCookie("https://www.reddit.com");
+        return cookies != null && cookies.contains("csrf_token=");
+    }
+
+    private void ensurePageThenFetch(final FetchJob job) {
         ensureWebView();
         if (webView == null) {
             finishProxyJob(job, 0, null, "no webview");
             return;
         }
-        final Runnable startFetch = new Runnable() {
-            @Override public void run() {
-                String js =
-                    "(function(){try{"
-                  + "fetch('" + jsEscape(job.url) + "',{credentials:'include',"
-                  + "headers:{'Accept':'application/json'}})"
-                  + ".then(function(r){var s=r.status;return r.text().then(function(t){"
-                  + "SyncTokenBridge.onFetch(s,t);});})"
-                  + ".catch(function(e){SyncTokenBridge.onFetch(0,String(e));});"
-                  + "}catch(e){SyncTokenBridge.onFetch(0,String(e));}})();";
-                webView.evaluateJavascript(js, null);
-                proxyTimeout = new Runnable() {
-                    @Override public void run() {
-                        finishProxyJob(job, 0, null, "timeout (" + FETCH_TIMEOUT_MS + "ms)");
-                    }
-                };
-                main.postDelayed(proxyTimeout, FETCH_TIMEOUT_MS);
-            }
-        };
-        if (pageLoaded) {
-            startFetch.run();
-        } else {
-            // Need a reddit.com document first: same-origin fetch + the edge challenge only
-            // clears by executing a full page's JS (same lesson as the token mint).
-            webView.loadUrl("https://www.reddit.com/");
-            waitUntilPageLoaded(startFetch, System.currentTimeMillis(), 20000L, new Runnable() {
-                @Override public void run() {
-                    finishProxyJob(job, 0, null, "page never loaded");
-                }
-            });
+        if (pageReady()) {
+            runProxyFetch(job);
+            return;
         }
+        // Need a reddit.com document first: same-origin fetch + the edge challenge only
+        // clears by executing a full page's JS (same lesson as the token mint).
+        webView.loadUrl("https://www.reddit.com/");
+        waitUntilPageReady(new Runnable() {
+            @Override public void run() { runProxyFetch(job); }
+        }, System.currentTimeMillis(), 20000L, new Runnable() {
+            @Override public void run() { finishProxyJob(job, 0, null, "page never loaded"); }
+        });
     }
 
-    /** Polls until a reddit.com page finished loading, then runs {@code then}; {@code or} on timeout. */
-    private void waitUntilPageLoaded(final Runnable then, final long startMs, final long timeoutMs, final Runnable or) {
+    private void runProxyFetch(final FetchJob job) {
+        String js =
+            "(function(){try{"
+          + "fetch('" + jsEscape(job.url) + "',{credentials:'include',"
+          + "headers:{'Accept':'application/json'}})"
+          + ".then(function(r){var s=r.status;return r.text().then(function(t){"
+          + "SyncTokenBridge.onFetch(s,t);});})"
+          + ".catch(function(e){SyncTokenBridge.onFetch(0,String(e));});"
+          + "}catch(e){SyncTokenBridge.onFetch(0,String(e));}})();";
+        webView.evaluateJavascript(js, null);
+        proxyTimeout = new Runnable() {
+            @Override public void run() {
+                finishProxyJob(job, 0, null, "timeout (" + FETCH_TIMEOUT_MS + "ms)");
+            }
+        };
+        main.postDelayed(proxyTimeout, FETCH_TIMEOUT_MS);
+    }
+
+    /** Polls until {@link #pageReady()}, then runs {@code then}; {@code or} on timeout. */
+    private void waitUntilPageReady(final Runnable then, final long startMs, final long timeoutMs, final Runnable or) {
         main.postDelayed(new Runnable() {
             @Override public void run() {
                 if (activeJob == null) {
                     return; // job was finished/cancelled meanwhile
                 }
-                if (pageLoaded) {
+                if (pageReady()) {
                     then.run();
                 } else if (System.currentTimeMillis() - startMs >= timeoutMs) {
                     or.run();
@@ -494,9 +517,24 @@ public final class WebSessionManager {
             main.post(new Runnable() {
                 @Override public void run() {
                     FetchJob job = activeJob;
-                    if (job != null) {
-                        finishProxyJob(job, status, body, null);
+                    if (job == null) {
+                        return;
                     }
+                    // A 403 with the web-app HTML means the page we fetched from was uncleared
+                    // (or its clearance just expired). One more time through a fresh home page —
+                    // the same recovery the token mint uses.
+                    if (status == 403 && isHtmlBody(body) && !job.retried) {
+                        job.retried = true;
+                        android.util.Log.i(TAG, "proxy 403 HTML; reloading home page and retrying once: " + job.url);
+                        if (proxyTimeout != null) {
+                            main.removeCallbacks(proxyTimeout);
+                            proxyTimeout = null;
+                        }
+                        pageLoaded = false;
+                        ensurePageThenFetch(job);
+                        return;
+                    }
+                    finishProxyJob(job, status, body, null);
                 }
             });
         }
@@ -504,6 +542,14 @@ public final class WebSessionManager {
         private String snippet(String s) {
             return s.substring(0, Math.min(80, s.length())).replace('\n', ' ');
         }
+    }
+
+    private static boolean isHtmlBody(String body) {
+        if (body == null || body.isEmpty()) {
+            return false;
+        }
+        String head = body.substring(0, Math.min(64, body.length())).trim();
+        return head.startsWith("<body") || head.startsWith("<!DOCTYPE") || head.startsWith("<html");
     }
 
     /**
