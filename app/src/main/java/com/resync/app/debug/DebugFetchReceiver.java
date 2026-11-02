@@ -30,16 +30,23 @@ public class DebugFetchReceiver extends BroadcastReceiver {
             accept = "application/json";
         }
         boolean auth = intent.getBooleanExtra("auth", false);
-        android.util.Log.i("DebugFetch", "fetching " + url + " accept=" + accept + " auth=" + auth);
-        WebSessionManager.get(context).fetchViaWebView(url, accept, auth,
-                new WebSessionManager.FetchCallback() {
-                    @Override public void onFetched(int status, String body) {
-                        android.util.Log.i("DebugFetch", "RESULT " + status + " len=" + body.length()
-                                + " head=" + body.substring(0, Math.min(150, body.length())).replace('\n', ' '));
-                    }
-                    @Override public void onError(String reason) {
-                        android.util.Log.i("DebugFetch", "ERROR " + reason);
-                    }
-                });
+        String eval = intent.getStringExtra("eval");
+        android.util.Log.i("DebugFetch", "fetching " + url + " accept=" + accept + " auth=" + auth
+                + (eval != null ? " eval=len" + eval.length() : ""));
+        WebSessionManager mgr = WebSessionManager.get(context);
+        WebSessionManager.FetchCallback cb = new WebSessionManager.FetchCallback() {
+            @Override public void onFetched(int status, String body) {
+                android.util.Log.i("DebugFetch", "RESULT " + status + " len=" + body.length()
+                        + " head=" + body.substring(0, Math.min(600, body.length())).replace('\n', ' '));
+            }
+            @Override public void onError(String reason) {
+                android.util.Log.i("DebugFetch", "ERROR " + reason);
+            }
+        };
+        if (eval != null) {
+            mgr.evalOnPage(url, eval, cb);
+        } else {
+            mgr.fetchViaWebView(url, accept, auth, cb);
+        }
     }
 }

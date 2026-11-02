@@ -81,9 +81,15 @@ public final class WebSessionManager {
         final FetchCallback callback;
         final String accept;
         final boolean withAuth;
+        /** When set, navigate to {@link #url} and evaluate this JS instead of fetch()-ing. */
+        final String evalJs;
         boolean retried;
         FetchJob(String url, String accept, boolean withAuth, FetchCallback callback) {
-            this.url = url; this.accept = accept; this.withAuth = withAuth; this.callback = callback;
+            this(url, accept, withAuth, null, callback);
+        }
+        FetchJob(String url, String accept, boolean withAuth, String evalJs, FetchCallback callback) {
+            this.url = url; this.accept = accept; this.withAuth = withAuth;
+            this.evalJs = evalJs; this.callback = callback;
         }
     }
     private final java.util.ArrayDeque<FetchJob> fetchQueue = new java.util.ArrayDeque<>();
@@ -380,6 +386,21 @@ public final class WebSessionManager {
         });
     }
 
+    /**
+     * Navigates the WebView to {@code url} (a real page load — passes the edge that walls
+     * fetch()-shaped requests), waits for it to finish, then evaluates {@code js} in the page and
+     * returns the JSON-encoded result string. This is the escape hatch for endpoints whose JSON
+     * is gone entirely: load the server-rendered page, extract the data from its DOM.
+     */
+    public void evalOnPage(final String url, final String js, final FetchCallback callback) {
+        main.post(new Runnable() {
+            @Override public void run() {
+                fetchQueue.add(new FetchJob(url, null, false, js, callback));
+                pumpFetchQueue();
+            }
+        });
+    }
+
     private void pumpFetchQueue() {
         if (proxyFetchInFlight || fetchQueue.isEmpty()) {
             return;
@@ -407,6 +428,17 @@ public final class WebSessionManager {
             finishProxyJob(job, 0, null, "no webview");
             return;
         }
+        if (job.evalJs != null) {
+            // Eval jobs must load the TARGET page — its DOM is the data source.
+            pageLoaded = false;
+            webView.loadUrl(job.url);
+            waitUntilPageReady(new Runnable() {
+                @Override public void run() { runProxyFetch(job); }
+            }, System.currentTimeMillis(), 25000L, new Runnable() {
+                @Override public void run() { finishProxyJob(job, 0, null, "page never loaded"); }
+            });
+            return;
+        }
         if (pageReady()) {
             runProxyFetch(job);
             return;
@@ -422,6 +454,21 @@ public final class WebSessionManager {
     }
 
     private void runProxyFetch(final FetchJob job) {
+        if (job.evalJs != null) {
+            webView.evaluateJavascript("(function(){" + job.evalJs + "})()",
+                    new android.webkit.ValueCallback<String>() {
+                        @Override public void onReceiveValue(String v) {
+                            finishProxyJob(job, 200, v == null ? "null" : v, null);
+                        }
+                    });
+            proxyTimeout = new Runnable() {
+                @Override public void run() {
+                    finishProxyJob(job, 0, null, "eval timeout (" + FETCH_TIMEOUT_MS + "ms)");
+                }
+            };
+            main.postDelayed(proxyTimeout, FETCH_TIMEOUT_MS);
+            return;
+        }
         String headers = "{'Accept':'" + jsEscape(job.accept) + "'";
         if (job.withAuth && cachedToken != null) {
             headers += ",'Authorization':'Bearer '+" + JSONObject.quote(cachedToken);
