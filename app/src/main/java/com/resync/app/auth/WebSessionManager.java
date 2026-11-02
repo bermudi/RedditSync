@@ -472,10 +472,12 @@ public final class WebSessionManager {
             webView.evaluateJavascript(js, null);
             proxyTimeout = new Runnable() {
                 @Override public void run() {
-                    finishProxyJob(job, 0, null, "eval timeout (" + FETCH_TIMEOUT_MS + "ms)");
+                    finishProxyJob(job, 0, null, "eval timeout (30s)");
                 }
             };
-            main.postDelayed(proxyTimeout, FETCH_TIMEOUT_MS);
+            // Cold engine + edge challenge + full page can take ~25s on the first job of a
+            // process; 30s keeps the clock ahead of that.
+            main.postDelayed(proxyTimeout, 30000L);
             return;
         }
         String headers = "{'Accept':'" + jsEscape(job.accept) + "'";
