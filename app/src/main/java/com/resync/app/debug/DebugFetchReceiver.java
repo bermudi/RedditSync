@@ -20,7 +20,7 @@ import com.resync.app.auth.WebSessionManager;
 public class DebugFetchReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(final Context context, Intent intent) {
-        final String url = intent.getDataString();
+        final String url = intent.getStringExtra("url");
         if (url == null) {
             android.util.Log.i("DebugFetch", "no url");
             return;
