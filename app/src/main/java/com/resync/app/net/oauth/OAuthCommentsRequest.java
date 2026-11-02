@@ -75,8 +75,80 @@ public class OAuthCommentsRequest extends RedditRequest<Void> {
         this.authorFullnames = new ArrayList<>();
         this.articleId = str;
         this.commentId = str3;
+        this.subreddit = str2;
         this.clearList = clearList;
         this.keepNewCommentFlag = keepNewCommentFlag;
+    }
+
+    private final String subreddit;
+
+    /**
+     * Edge-wall fallback: thread JSON is 403-walled for every client now, but the
+     * server-rendered thread page carries the whole thread in its DOM (shreddit-post attrs +
+     * shreddit-comment elements with depth/author/score/created and a {thingid}-post-rtjson-content
+     * body div). The JS rebuilds the legacy [post, comments] listing shape the unchanged
+     * CommentParserHelper consumes. Nesting is reconstructed from the depth attribute with a
+     * pre-order stack (shreddit renders comments in pre-order, like the old JSON).
+     */
+    @Override
+    protected String[] webProxySpec() {
+        StringBuilder page = new StringBuilder("https://www.reddit.com/");
+        if (!TextUtils.isEmpty(this.subreddit)) {
+            page.append("r/").append(this.subreddit).append("/");
+        }
+        page.append("comments/").append(this.articleId);
+        if (this.commentId != null) {
+            page.append("/_/").append(this.commentId);
+        }
+        page.append("/");
+        String js =
+            "var p=document.querySelector('shreddit-post');"
+          + "if(!p){return '[]';}"
+          + "function A(e,n){return e?e.getAttribute(n)||'':'';}"
+          + "function N(v){v=parseInt(v,10);return isNaN(v)?0:v;}"
+          + "var pid=A(p,'postid').replace(/^t3_/,'');"
+          + "var sub=A(p,'subreddit')||'" + (this.subreddit == null ? "" : this.subreddit) + "';"
+          + "var t=document.querySelector('shreddit-title');"
+          + "var post={id:pid,subreddit:sub,author:A(p,'author')||'[deleted]',"
+          + "  title:t?t.innerText:document.title,selftext:'',"
+          + "  url:A(p,'content-href')||location.origin+A(p,'permalink'),"
+          + "  permalink:A(p,'permalink')||location.pathname,"
+          + "  score:N(A(p,'score')),num_comments:N(A(p,'comment-count')),"
+          + "  created_utc:Math.round((Date.parse(A(p,'created-timestamp'))||Date.now())/1000),"
+          + "  edited:false,gildings:{},domain:'reddit.com',over_18:false,locked:false,"
+          + "  stickied:false,hidden:false,archived:false,quarantined:false,saved:false,"
+          + "  upvote_ratio:1,visited:false,clicked:false,is_gallery:!!A(p,'gallery'),"
+          + "  is_self:false,is_video:false,spoiler:false,link_flair_text:'',author_flair_text:'',"
+          + "  thumbnail:'',subreddit_id:'',subreddit_type:'public',subreddit_subscribers:0,"
+          + "  view_count:0,likes:null,distinguished:null,media:null,secure_media:null,"
+          + "  preview:null,media_embed:{},secure_media_embed:{},author_fullname:'',"
+          + "  suggested_sort:'',contest_mode:false,link_flair_background_color:'',"
+          + "  link_flair_text_color:'dark',post_hint:'',all_awardings:[],total_awards_received:0};"
+          + "var top=[],stack=[],kids={};"
+          + "document.querySelectorAll('shreddit-comment').forEach(function(c){"
+          + "  var cid=A(c,'thingid').replace(/^t1_/,'');if(!cid){return;}"
+          + "  var d=N(A(c,'depth'));"
+          + "  var be=document.getElementById(A(c,'thingid')+'-post-rtjson-content');"
+          + "  var body=be?be.innerText.trim():'';"
+          + "  var o={kind:'t1',data:{id:cid,author:A(c,'author')||'[deleted]',body:body,"
+          + "    selftext:body,url:location.origin+A(c,'permalink'),"
+          + "    permalink:A(c,'permalink')||'',"
+          + "    parent_id:(d>0&&stack[d-1])?'t1_'+stack[d-1]:'t3_'+pid,"
+          + "    score:N(A(c,'score')),ups:N(A(c,'score')),downs:0,"
+          + "    created_utc:Math.round(Date.parse(A(c,'created'))/1000)||0,edited:false,"
+          + "    gildings:{},replies:{data:{children:[]}},depth:d,is_submitter:false,"
+          + "    stickied:false,distinguished:null,author_flair_text:'',controversiality:0,"
+          + "    link_id:'t3_'+pid,subreddit:sub,subreddit_id:'',likes:null,collapsed:false,"
+          + "    archived:false,locked:false,send_replies:true,can_gild:false,"
+          + "    total_awards_received:0,all_awardings:[],awarders:[],treatment_tags:[]}};"
+          + "  var arr=(d===0)?top:(kids[stack[d-1]]||(kids[stack[d-1]]=[]));"
+          + "  arr.push(o);"
+          + "  stack.length=d;stack[d]=cid;"
+          + "  kids[cid]=o.data.replies.data.children;"
+          + "});"
+          + "return JSON.stringify([{data:{children:[{kind:'t3',data:post}]}},"
+          + "  {data:{children:top}}]);";
+        return new String[]{page.toString(), "shreddit-post", js};
     }
 
     public static String buildUrl(Context context, String str, String str2, String str3, String str4, boolean rawJson) {

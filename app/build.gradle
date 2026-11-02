@@ -22,8 +22,8 @@ android {
         applicationId "com.resync.app"
         minSdk 23
         targetSdk 35
-        versionCode 24008
-        versionName "1.0.8"
+        versionCode 24009
+        versionName "1.0.9"
         multiDexEnabled true
     }
 

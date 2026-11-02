@@ -20,8 +20,11 @@ import com.resync.app.util.links.LinkHandler;
 /* JADX INFO: compiled from: OAuthGalleryRequest.java */
 /* JADX INFO: loaded from: classes.dex */
 public class OAuthGalleryRequest extends RedditRequest<Gallery> {
+    private final String contentUrl;
+
     public OAuthGalleryRequest(String str, Response.Listener<Gallery> listener, Response.ErrorListener errorListener) {
         super(RedditApplication.getAppContext(), 0, buildUrl(str), listener, errorListener);
+        this.contentUrl = str;
         setShouldCache(true);
     }
 
@@ -31,6 +34,33 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
         // publishes the same post object including gallery_data and media_metadata, so the
         // request goes there and the reply is unwrapped from its two-listing thread shape below.
         return "https://oauth.reddit.com/comments/" + LinkHandler.getCommentsId(str.replace("?is_gallery=true", "")) + ".json?limit=1";
+    }
+
+    /**
+     * Edge-wall fallback: the thread JSON endpoints are 403-walled for every client now, but the
+     * server-rendered thread page carries the gallery's full-res i.redd.it images in the
+     * shreddit-post DOM. The JS rebuilds the exact [postListing] shape parseNetworkResponse
+     * expects (media_metadata + gallery_data), synthesized from those image elements.
+     */
+    @Override
+    protected String[] webProxySpec() {
+        String id = LinkHandler.getCommentsId(this.contentUrl.replace("?is_gallery=true", ""));
+        String page = "https://www.reddit.com/comments/" + id + "/";
+        String js =
+            "var p=document.querySelector('shreddit-post');"
+          + "if(!p){return '[]';}"
+          + "var urls=[],seen={};"
+          + "p.querySelectorAll('img,a').forEach(function(e){"
+          + "  var u=(e.tagName==='IMG')?(e.getAttribute('src')||''):(e.getAttribute('href')||'');"
+          + "  var m=u&&u.match(/i\\.redd\\.it\\/([a-z0-9]+)\\.(jpe?g|png|gif|webp)/i);"
+          + "  if(m&&!seen[m[1]]){seen[m[1]]=1;urls.push('https://i.redd.it/'+m[1]+'.'+m[2].toLowerCase());}"
+          + "});"
+          + "var mm={},items=[];"
+          + "urls.forEach(function(u,i){var id='m'+i;items.push({media_id:id,caption:''});"
+          + "  mm[id]={m:'image',s:{u:u},p:[{u:u,y:0,x:0}]};});"
+          + "return JSON.stringify([{data:{children:[{data:{is_gallery:true,"
+          + "  gallery_data:{items:items},media_metadata:mm}}}]}}]);";
+        return new String[]{page, "shreddit-post", js};
     }
 
     @Override // com.android.volley.Request

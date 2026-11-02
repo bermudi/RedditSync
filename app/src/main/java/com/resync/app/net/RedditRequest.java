@@ -62,58 +62,73 @@ public abstract class RedditRequest<T> extends Request<T> {
 
     /**
      * Intercepts error delivery: a 403 whose body is the shreddit web-app HTML means the edge
-     * bot-walled this endpoint for the plain HTTP stack, not a real API error. GETs to
-     * oauth.reddit.com are transparently retried through the session WebView
-     * (see {@link com.resync.app.auth.WebSessionManager#fetchViaWebView}); anything else, or a
-     * failed proxy attempt, falls through to the original error listener.
+     * bot-walled this endpoint for the plain HTTP stack — thread-shaped URLs no longer serve
+     * JSON to ANY client (verified: fetch() from a cleared real page still 403s), but the
+     * server-rendered page itself loads fine. Subclasses return a {@link #webProxySpec()} and
+     * the fallback loads that page in the session WebView and evaluates the spec's JS, which
+     * rebuilds the legacy JSON this request's parser expects.
      */
     @Override // com.android.volley.Request
     public void deliverError(VolleyError error) {
-        if (!webProxyAttempted && isWebApp403(error) && getMethod() == Method.GET
-                && getUrl() != null && getUrl().startsWith("https://oauth.reddit.com/")) {
-            webProxyAttempted = true;
-            String wwwUrl = getUrl().replaceFirst("^https://oauth\\.reddit\\.com", "https://www.reddit.com");
-            // www JSON escapes <>& unless raw_json=1 is set; oauth bodies are always raw.
-            wwwUrl += (wwwUrl.contains("?") ? "&" : "?") + "raw_json=1";
-            android.util.Log.i("WebView403", "edge 403 (web-app HTML) for " + getUrl() + " -> refetching via WebView");
-            try {
-                com.resync.app.auth.WebSessionManager.get(this.context).fetchViaWebView(wwwUrl,
-                        new com.resync.app.auth.WebSessionManager.FetchCallback() {
-                            @Override public void onFetched(int status, String body) {
-                                Response<T> parsed = null;
-                                String failure = null;
-                                if (status == 200 && body != null && !body.isEmpty()
-                                        && (body.charAt(0) == '{' || body.charAt(0) == '[')) {
-                                    try {
-                                        parsed = parseNetworkResponse(new NetworkResponse(200,
-                                                body.getBytes("UTF-8"), new java.util.HashMap<String, String>(), false));
-                                    } catch (Exception e) {
-                                        failure = "proxy parse dispatch: " + e;
+        if (!webProxyAttempted && isWebApp403(error) && getMethod() == Method.GET) {
+            String[] spec = webProxySpec();
+            if (spec != null) {
+                webProxyAttempted = true;
+                final String pageUrl = spec[0];
+                final String waitFor = spec[1];
+                final String js = spec[2];
+                android.util.Log.i("WebView403", "edge 403 for " + getUrl() + " -> scraping " + pageUrl);
+                try {
+                    com.resync.app.auth.WebSessionManager.get(this.context).evalOnPage(pageUrl, js, waitFor,
+                            new com.resync.app.auth.WebSessionManager.FetchCallback() {
+                                @Override public void onFetched(int status, String body) {
+                                    String json = body == null ? "" : body.trim();
+                                    // evalOnPage delivers the JS return value; webProxySpec JS
+                                    // returns JSON.stringify(...), so this is the document itself.
+                                    if (status == 200 && json.startsWith("[")) {
+                                        try {
+                                            Response<T> parsed = parseNetworkResponse(new NetworkResponse(200,
+                                                    json.getBytes("UTF-8"), new java.util.HashMap<String, String>(), false));
+                                            if (parsed.isSuccess()) {
+                                                android.util.Log.i("WebView403", "scrape ok for " + getUrl());
+                                                deliverResponse(parsed.result);
+                                                return;
+                                            }
+                                            android.util.Log.i("WebView403", "scrape parse failed: " + parsed.error);
+                                            RedditRequest.this.deliverError(parsed.error != null ? parsed.error
+                                                    : new VolleyError("web scrape parse failed"));
+                                        } catch (Exception e) {
+                                            android.util.Log.i("WebView403", "scrape dispatch: " + e);
+                                            RedditRequest.this.deliverError(new VolleyError("web scrape: " + e));
+                                        }
+                                    } else {
+                                        android.util.Log.i("WebView403", "scrape HTTP " + status + ": "
+                                                + (json.length() > 120 ? json.substring(0, 120) : json));
+                                        RedditRequest.this.deliverError(new VolleyError("web scrape HTTP " + status));
                                     }
-                                } else {
-                                    failure = "proxy HTTP " + status + ": "
-                                            + (body == null ? "" : body.substring(0, Math.min(80, body.length())).replace('\n', ' '));
                                 }
-                                if (parsed != null && parsed.isSuccess()) {
-                                    android.util.Log.i("WebView403", "proxied ok: " + getUrl());
-                                    deliverResponse(parsed.result);
-                                } else {
-                                    android.util.Log.i("WebView403", failure != null ? failure : "proxy parse failed");
-                                    RedditRequest.this.deliverError(new VolleyError(failure != null ? failure : "web proxy refetch failed"));
+                                @Override public void onError(String reason) {
+                                    android.util.Log.i("WebView403", "scrape error: " + reason);
+                                    RedditRequest.this.deliverError(new VolleyError("web scrape: " + reason));
                                 }
-                            }
-                            @Override public void onError(String reason) {
-                                android.util.Log.i("WebView403", "proxy error: " + reason);
-                                RedditRequest.this.deliverError(new VolleyError("web proxy: " + reason));
-                            }
-                        });
-                return; // swallowed the 403; the proxy callbacks deliver the real outcome
-            } catch (Exception e) {
-                android.util.Log.i("WebView403", "dispatch failed: " + e);
-                // fall through and deliver the original error
+                            });
+                    return; // swallowed the 403; the scrape callbacks deliver the real outcome
+                } catch (Exception e) {
+                    android.util.Log.i("WebView403", "dispatch failed: " + e);
+                    // fall through and deliver the original error
+                }
             }
         }
         super.deliverError(error);
+    }
+
+    /**
+     * Subclass hook for the edge-wall fallback: {@code {pageUrl, waitForSelector, js}} where js
+     * runs in the loaded page and returns JSON.stringify(...) of the legacy response body this
+     * request's parser expects. Null (default) = no fallback; the original error is delivered.
+     */
+    protected String[] webProxySpec() {
+        return null;
     }
 
     /** True for the edge bot-wall signature: HTTP 403 whose body is HTML (the web-app shell). */
