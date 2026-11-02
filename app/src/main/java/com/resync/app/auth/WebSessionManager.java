@@ -43,6 +43,8 @@ public final class WebSessionManager {
     private static final String TOKEN_URL = "https://www.reddit.com/svc/shreddit/token";
     /** Refresh when the cached token is within this many ms of expiry. */
     private static final long EXPIRY_SKEW_MS = 5 * 60 * 1000L;
+    /** Per-job timeout for proxied JSON fetches. */
+    private static final long FETCH_TIMEOUT_MS = 20000L;
     // The minted bearer survives app restarts here (the in-memory cache dies with the process,
     // and every cold start re-minting means riding reddit's edge bot-challenge each time).
     private static final String PREFS_NAME = "web_session";
@@ -69,8 +71,32 @@ public final class WebSessionManager {
     private volatile boolean pageLoaded;
     private int mintAttempt;
 
+    // ---- WebView JSON proxy (late-2026 edge bot-wall) ----
+    // Reddit's edge 403-walls thread-shaped endpoints (/comments/{id}.json etc.) for non-browser
+    // HTTP stacks while listings still pass, so RedditRequest falls back to fetching through this
+    // WebView (a real engine with cookies that clears the edge challenge). One fetch at a time —
+    // a WebView executes JS on a single main thread.
+    private static final class FetchJob {
+        final String url;
+        final FetchCallback callback;
+        FetchJob(String url, FetchCallback callback) { this.url = url; this.callback = callback; }
+    }
+    private final java.util.ArrayDeque<FetchJob> fetchQueue = new java.util.ArrayDeque<>();
+    private boolean proxyFetchInFlight;
+    private FetchJob activeJob;
+    private Runnable proxyTimeout;
+
     public interface TokenCallback {
         void onToken(String jwt);
+        void onError(String reason);
+    }
+
+    /**
+     * Result of {@link #fetchViaWebView}: {@code onFetched} carries the HTTP status and body of the
+     * proxied request (body is null/empty never; status 0 means the fetch itself failed).
+     */
+    public interface FetchCallback {
+        void onFetched(int status, String body);
         void onError(String reason);
     }
 
@@ -318,9 +344,112 @@ public final class WebSessionManager {
         }
     }
 
+    // ---- WebView JSON proxy ----
+
+    /**
+     * Fetches a www.reddit.com URL from inside the session WebView (same-origin browser fetch with
+     * the full cookie jar and a real Chromium TLS stack) and hands back status+body. Used as the
+     * fallback when Reddit's edge 403-walls an endpoint for the plain HTTP stack. Jobs are
+     * serialized; the callback fires on the main thread.
+     */
+    public void fetchViaWebView(final String url, final FetchCallback callback) {
+        main.post(new Runnable() {
+            @Override public void run() {
+                fetchQueue.add(new FetchJob(url, callback));
+                pumpFetchQueue();
+            }
+        });
+    }
+
+    private void pumpFetchQueue() {
+        if (proxyFetchInFlight || fetchQueue.isEmpty()) {
+            return;
+        }
+        final FetchJob job = fetchQueue.poll();
+        proxyFetchInFlight = true;
+        activeJob = job;
+        ensureWebView();
+        if (webView == null) {
+            finishProxyJob(job, 0, null, "no webview");
+            return;
+        }
+        final Runnable startFetch = new Runnable() {
+            @Override public void run() {
+                String js =
+                    "(function(){try{"
+                  + "fetch('" + jsEscape(job.url) + "',{credentials:'include',"
+                  + "headers:{'Accept':'application/json'}})"
+                  + ".then(function(r){var s=r.status;return r.text().then(function(t){"
+                  + "SyncTokenBridge.onFetch(s,t);});})"
+                  + ".catch(function(e){SyncTokenBridge.onFetch(0,String(e));});"
+                  + "}catch(e){SyncTokenBridge.onFetch(0,String(e));}})();";
+                webView.evaluateJavascript(js, null);
+                proxyTimeout = new Runnable() {
+                    @Override public void run() {
+                        finishProxyJob(job, 0, null, "timeout (" + FETCH_TIMEOUT_MS + "ms)");
+                    }
+                };
+                main.postDelayed(proxyTimeout, FETCH_TIMEOUT_MS);
+            }
+        };
+        if (pageLoaded) {
+            startFetch.run();
+        } else {
+            // Need a reddit.com document first: same-origin fetch + the edge challenge only
+            // clears by executing a full page's JS (same lesson as the token mint).
+            webView.loadUrl("https://www.reddit.com/");
+            waitUntilPageLoaded(startFetch, System.currentTimeMillis(), 20000L, new Runnable() {
+                @Override public void run() {
+                    finishProxyJob(job, 0, null, "page never loaded");
+                }
+            });
+        }
+    }
+
+    /** Polls until a reddit.com page finished loading, then runs {@code then}; {@code or} on timeout. */
+    private void waitUntilPageLoaded(final Runnable then, final long startMs, final long timeoutMs, final Runnable or) {
+        main.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (activeJob == null) {
+                    return; // job was finished/cancelled meanwhile
+                }
+                if (pageLoaded) {
+                    then.run();
+                } else if (System.currentTimeMillis() - startMs >= timeoutMs) {
+                    or.run();
+                } else {
+                    main.postDelayed(this, 400);
+                }
+            }
+        }, 400);
+    }
+
+    private void finishProxyJob(FetchJob job, int status, String body, String error) {
+        if (proxyTimeout != null) {
+            main.removeCallbacks(proxyTimeout);
+            proxyTimeout = null;
+        }
+        proxyFetchInFlight = false;
+        if (activeJob == job) {
+            activeJob = null;
+        }
+        if (error != null) {
+            android.util.Log.i(TAG, "proxy fetch failed for " + job.url + ": " + error);
+            job.callback.onError(error);
+        } else {
+            android.util.Log.i(TAG, "proxy fetch " + status + " (" + (body == null ? 0 : body.length())
+                    + " bytes) for " + job.url);
+            job.callback.onFetched(status, body == null ? "" : body);
+        }
+        pumpFetchQueue();
+    }
+
+    private static String jsEscape(String s) {
+        return s.replace("\\", "\\\\").replace("'", "\\'");
+    }
+
     /** JS → Java bridge. Called by the in-WebView fetch. */
-    private final class Bridge {
-        @JavascriptInterface
+    private final class Bridge {        @JavascriptInterface
         public void onToken(String responseBody, int status) {
             String jwt = null;
             String reason = null;
@@ -356,6 +485,19 @@ public final class WebSessionManager {
             final String why = "fetch error: " + reason;
             main.post(new Runnable() {
                 @Override public void run() { deliver(null, why); }
+            });
+        }
+
+        /** Proxy-fetch callback: status + body of a {@link #fetchViaWebView} job. */
+        @JavascriptInterface
+        public void onFetch(final int status, final String body) {
+            main.post(new Runnable() {
+                @Override public void run() {
+                    FetchJob job = activeJob;
+                    if (job != null) {
+                        finishProxyJob(job, status, body, null);
+                    }
+                }
             });
         }
 

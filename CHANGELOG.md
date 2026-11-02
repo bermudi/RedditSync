@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Posts/comments not opening at all ("every post throws an error", albums included).** Reddit's
+  edge now bot-walls every thread-shaped endpoint (`/comments/{id}.json`, `/r/{sub}/comments/…`)
+  for non-browser HTTP clients, answering `403` with the web-app HTML shell instead of JSON —
+  while listing endpoints still answer normally, which is why the feed kept working. Any reddit
+  GET that comes back with that signature is now transparently re-fetched through the session
+  WebView (a real browser engine with cookies that clears the edge challenge), and the JSON it
+  returns is fed to the original parser. Comment threads, galleries/albums, "load more comments"
+  and award views all ride this path.
 - **Galleries/albums not opening ("Could not load gallery").** Reddit stopped answering `/api/info`
   for third-party clients — the endpoint Sync's album viewer resolves a gallery post through. The
   gallery is now loaded from `/comments/{id}.json`, which publishes the same post object
