@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `/v2/gifs/{id}`, whose `urls.hd`/`urls.sd` are the direct media files.
 - **RedGifs/Gfycat link IDs parsed as empty** when the URL carried a query string or fragment
   around the id (`…/watch/<id>/?92/`), producing 404s.
+- **Sign-in failing with a bare "token fetch failed".** The hidden token-minting WebView ran its
+  same-origin fetch before the reddit.com page it needs had loaded — from the blank page the
+  fetch is a null-origin request and dies on CORS. The mint now waits for the page to finish
+  loading, retries once through the full home page when reddit's edge answers with a bot
+  challenge (common from VPN exit IPs), and if login still fails the message names the actual
+  reason (HTTP status + response snippet, or the fetch error) instead of the generic string.
 - **RedGifs token rejection retries.** A RedGifs request turned away with a stale token now
   re-runs once with a fresh token instead of surfacing an error.
 - **Threads failing to render when the text contains a `$`.** Matched text handed back as a regex

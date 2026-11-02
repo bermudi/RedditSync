@@ -58,6 +58,12 @@ public final class WebSessionManager {
     private final List<TokenCallback> pending = new ArrayList<>();
     private boolean fetchInFlight;
 
+    // Mint bookkeeping: the hidden WebView must finish loading a reddit.com page before the
+    // same-origin fetch can run (fetching from about:blank is a null-origin CORS failure), and a
+    // failed mint is retried once through the full home page so reddit's edge JS challenge can run.
+    private volatile boolean pageLoaded;
+    private int mintAttempt;
+
     public interface TokenCallback {
         void onToken(String jwt);
         void onError(String reason);
@@ -123,9 +129,10 @@ public final class WebSessionManager {
                         return; // a fetch is already running; this callback will be served by it
                     }
                     fetchInFlight = true;
+                    mintAttempt = 0;
                 }
                 ensureWebView();
-                mintToken();
+                mintToken(0);
             }
         });
     }
@@ -183,6 +190,15 @@ public final class WebSessionManager {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return !isRedditHost(request.getUrl());
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // The token fetch must run from a loaded reddit.com document; about:blank is a
+                // null origin and the same-origin fetch fails CORS from there.
+                if (isRedditHost(Uri.parse(url))) {
+                    pageLoaded = true;
+                }
+            }
         });
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
         // The bridge is only safe because this WebView is pinned to reddit.com (above).
@@ -191,42 +207,45 @@ public final class WebSessionManager {
 
     /**
      * Runs the token fetch inside the WebView. We must be on a reddit.com origin for the same-origin
-     * POST + cookie attach to work, so we load a reddit.com page first, then fetch once the CSRF
-     * cookie is present.
+     * POST + cookie attach to work, so we load a reddit.com page first, wait for that page to finish
+     * loading AND the CSRF cookie to be present, then fetch.
      *
      * <p>Logged-IN: the session cookies already exist, so a tiny same-origin page (robots.txt) is
-     * enough and the fetch can fire almost immediately.
+     * enough and the fetch can fire as soon as it loads.
      *
-     * <p>Logged-OUT (anonymous): we must load a real HTML page (the home page) so reddit's edge sets
-     * the {@code loid}+{@code csrf_token} cookies AND runs its JS bot-challenge (a fresh signed-out
-     * visit is redirected through a {@code js_challenge} page). The Chromium WebView executes that
-     * challenge transparently; we just wait for {@code csrf_token} to appear before minting. The
-     * minted bearer is anonymous and reads all public listings/threads from oauth.reddit.com.
+     * <p>Logged-OUT (anonymous): we load the home page so reddit's edge sets the {@code loid}+
+     * {@code csrf_token} cookies AND runs its JS bot-challenge; we wait for {@code csrf_token}.
+     *
+     * <p>Retries (attempt &gt; 0, or any failure) always load the full home page: if the first fetch
+     * was answered by an edge bot-check (403/challenge HTML — e.g. behind a VPN exit), loading a
+     * real page lets the WebView solve the challenge before we fetch again.
      */
-    private void mintToken() {
+    private void mintToken(int attempt) {
         boolean anonymous = !hasSession();
-        // robots.txt is tiny but does NOT run reddit's HTML/JS challenge; for the anonymous bootstrap
-        // we need a real page so the challenge resolves and loid/csrf get set.
-        webView.loadUrl(anonymous ? "https://www.reddit.com/" : "https://www.reddit.com/robots.txt");
-        // Poll for the csrf_token cookie (anon: up to ~15s to ride out the JS challenge; logged-in:
-        // it's already there so this fires on the first tick), then run the same-origin fetch.
-        waitForCsrfThenFetch(System.currentTimeMillis(), anonymous ? 15000L : 4000L);
+        boolean fullPage = anonymous || attempt > 0;
+        pageLoaded = false;
+        webView.loadUrl(fullPage ? "https://www.reddit.com/" : "https://www.reddit.com/robots.txt");
+        waitForPageThenFetch(System.currentTimeMillis(), fullPage ? 20000L : 8000L);
     }
 
-    /** Polls the cookie jar for {@code csrf_token}; once present (or on timeout) runs the token fetch. */
-    private void waitForCsrfThenFetch(final long startMs, final long timeoutMs) {
+    /**
+     * Polls until the loaded page has finished AND the {@code csrf_token} cookie exists, then runs
+     * the token fetch. On timeout runs the fetch anyway (best effort — the retry in {@link #deliver}
+     * handles a second failure through the full home page).
+     */
+    private void waitForPageThenFetch(final long startMs, final long timeoutMs) {
         main.postDelayed(new Runnable() {
             @Override
             public void run() {
                 String cookies = CookieManager.getInstance().getCookie("https://www.reddit.com");
                 boolean haveCsrf = cookies != null && cookies.contains("csrf_token=");
-                if (haveCsrf || System.currentTimeMillis() - startMs >= timeoutMs) {
+                if ((pageLoaded && haveCsrf) || System.currentTimeMillis() - startMs >= timeoutMs) {
                     runTokenFetch();
                 } else {
                     main.postDelayed(this, 400);
                 }
             }
-        }, 600);
+        }, 400);
     }
 
     /** Same-origin POST to the token endpoint, reading the CSRF token from the WebView's cookie jar. */
@@ -239,14 +258,23 @@ public final class WebSessionManager {
           + "fetch('" + TOKEN_URL + "',{method:'POST',credentials:'include',"
           + "headers:{'Content-Type':'application/json','Accept':'application/json'},"
           + "body:JSON.stringify({csrf_token:csrf})})"
-          + ".then(function(r){return r.text();})"
-          + ".then(function(t){SyncTokenBridge.onToken(t);})"
+          + ".then(function(r){var s=r.status;return r.text().then(function(t){SyncTokenBridge.onToken(t,s);});})"
           + ".catch(function(e){SyncTokenBridge.onError(String(e));});"
           + "}catch(e){SyncTokenBridge.onError(String(e));}})();";
         webView.evaluateJavascript(js, null);
     }
 
-    private void deliver(String jwt) {
+    /**
+     * Serves all pending callbacks. On failure with the fast path (attempt 0), retries once through
+     * the full home page before giving up, so a single edge bot-check doesn't fail the login.
+     */
+    private void deliver(String jwt, String reason) {
+        if (jwt == null && mintAttempt < 1) {
+            mintAttempt++;
+            android.util.Log.i(TAG, "Token mint failed (" + reason + "); retrying via home page");
+            mintToken(mintAttempt);
+            return;
+        }
         List<TokenCallback> toCall;
         synchronized (pending) {
             toCall = new ArrayList<>(pending);
@@ -254,15 +282,16 @@ public final class WebSessionManager {
             fetchInFlight = false;
         }
         for (TokenCallback cb : toCall) {
-            if (jwt != null) cb.onToken(jwt); else cb.onError("token fetch failed");
+            if (jwt != null) cb.onToken(jwt); else cb.onError(reason);
         }
     }
 
     /** JS → Java bridge. Called by the in-WebView fetch. */
     private final class Bridge {
         @JavascriptInterface
-        public void onToken(String responseBody) {
+        public void onToken(String responseBody, int status) {
             String jwt = null;
+            String reason = null;
             try {
                 JSONObject o = new JSONObject(responseBody);
                 jwt = o.optString("token", null);
@@ -272,27 +301,33 @@ public final class WebSessionManager {
                     cachedExpiryMs = expires > 0 ? expires : System.currentTimeMillis() + 23 * 60 * 60 * 1000L;
                     android.util.Log.i(TAG, "Minted web-session token, expires " + cachedExpiryMs);
                 } else {
-                    android.util.Log.i(TAG, "Token endpoint returned no token: "
-                            + responseBody.substring(0, Math.min(120, responseBody.length())));
+                    reason = "HTTP " + status + ": " + snippet(responseBody);
+                    android.util.Log.i(TAG, "Token endpoint returned no token: " + reason);
                     jwt = null;
                 }
             } catch (Exception e) {
-                android.util.Log.i(TAG, "Token parse error: " + e + " body="
-                        + responseBody.substring(0, Math.min(120, responseBody.length())));
+                reason = "HTTP " + status + " (" + e + "): " + snippet(responseBody);
+                android.util.Log.i(TAG, "Token parse error: " + reason);
                 jwt = null;
             }
             final String result = jwt;
+            final String why = reason;
             main.post(new Runnable() {
-                @Override public void run() { deliver(result); }
+                @Override public void run() { deliver(result, why); }
             });
         }
 
         @JavascriptInterface
         public void onError(String reason) {
             android.util.Log.i(TAG, "In-WebView fetch error: " + reason);
+            final String why = "fetch error: " + reason;
             main.post(new Runnable() {
-                @Override public void run() { deliver(null); }
+                @Override public void run() { deliver(null, why); }
             });
+        }
+
+        private String snippet(String s) {
+            return s.substring(0, Math.min(80, s.length())).replace('\n', ' ');
         }
     }
 
