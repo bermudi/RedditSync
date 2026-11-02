@@ -495,17 +495,21 @@ public class LinkHandler {
 
     public static String getGfycatId(String str) {
         try {
+            // Strip the query and fragment before the trailing-slash cleanup: a URL like
+            // redgifs.com/watch/<id>/?92/ would otherwise resolve to an empty id and 404.
+            int query = str.indexOf('?');
+            if (query >= 0) {
+                str = str.substring(0, query);
+            }
+            int fragment = str.indexOf('#');
+            if (fragment >= 0) {
+                str = str.substring(0, fragment);
+            }
             if (str.endsWith("/")) {
-                str = str.substring(0, str.lastIndexOf("/"));
+                str = str.substring(0, str.length() - 1);
             }
-            String strReplace = str.substring(str.lastIndexOf("/") + 1, str.length()).replace(".gif", "").replace(".mp4", "").replace(".webm", "").replace("-mobile", "").replace("-size_restricted", "").replace("-max-1mb-poster", "").replace("-size_restricted", "");
-            if (strReplace.contains("-")) {
-                strReplace = strReplace.split("-")[0];
-            }
-            if (strReplace.contains("?")) {
-                strReplace = strReplace.substring(0, strReplace.lastIndexOf("?"));
-            }
-            return strReplace.contains("#") ? strReplace.substring(0, strReplace.lastIndexOf("#")) : strReplace;
+            String strReplace = str.substring(str.lastIndexOf("/") + 1, str.length()).replace(".gif", "").replace(".mp4", "").replace(".webm", "").replace("-mobile", "").replace("-size_restricted", "").replace("-max-1mb-poster", "");
+            return strReplace.contains("-") ? strReplace.split("-")[0] : strReplace;
         } catch (Exception e) {
             CrashlyticsHelper.logEvent(6, "LinkHandler", "Crashing getGfycatId() URL: " + str);
             Logger.logException(e);

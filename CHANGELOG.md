@@ -12,7 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Galleries/albums not opening ("Could not load gallery").** Reddit stopped answering `/api/info`
+  for third-party clients — the endpoint Sync's album viewer resolves a gallery post through. The
+  gallery is now loaded from `/comments/{id}.json`, which publishes the same post object
+  (`gallery_data` + `media_metadata`), so albums open again.
+- **"Load more comments" failing.** Reddit also blocked `/api/morechildren`. The request now reads
+  the comments thread instead (`/comments/{link}` for a top-level "more",
+  `/comments/{link}/_/{parent}` for a nested one) and cuts the reply back down to the flat list
+  `morechildren` used to return, keeping the ordering the indentation is derived from.
+- **"View awards" failing.** Same `/api/info` block: post awards load from the thread's first
+  listing, comment awards from `/comments/{link}/_/{comment}` (the comment's link id is now passed
+  through to the awards dialog).
+- **RedGifs playback.** The `/ifr/<id>` embed-page scrape (the earlier workaround) now answers
+  404. RedGifs is read through their stable v2 API instead: a temporary token from
+  `/v2/auth/temporary` (cached for ~a day, tied to the app's user agent) unlocks
+  `/v2/gifs/{id}`, whose `urls.hd`/`urls.sd` are the direct media files.
+- **RedGifs/Gfycat link IDs parsed as empty** when the URL carried a query string or fragment
+  around the id (`…/watch/<id>/?92/`), producing 404s.
 
 ## [1.0.3] - 2026-06-22
 

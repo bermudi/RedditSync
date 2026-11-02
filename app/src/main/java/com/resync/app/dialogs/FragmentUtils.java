@@ -61,6 +61,21 @@ public final class FragmentUtils {
         showWithArguments(cls, fragmentManager, bundle);
     }
 
+    public static String keyLinkId() {
+        return "link_id";
+    }
+
+    /** Like {@link #showWithPostId}, plus the id of the link (thread) the post lives under. */
+    public static void showWithPostIdAndLinkId(Class<? extends CustomBottomSheetDialogFragment> cls, FragmentManager fragmentManager, String postId, String linkId) {
+        if (StringUtils.isEmpty(postId)) {
+            throw new RuntimeException("Missing post ID: " + cls);
+        }
+        Bundle bundle = new Bundle();
+        bundle.putString(keyPostId(), postId);
+        bundle.putString(keyLinkId(), linkId);
+        showWithArguments(cls, fragmentManager, bundle);
+    }
+
     public static void showWithPost(Class<? extends CustomBottomSheetDialogFragment> cls, FragmentManager fragmentManager, Post post) {
         if (post != null) {
             Bundle bundle = new Bundle();

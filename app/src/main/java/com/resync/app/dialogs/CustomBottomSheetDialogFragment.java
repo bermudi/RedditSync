@@ -41,6 +41,7 @@ public abstract class CustomBottomSheetDialogFragment extends BottomSheetDialogF
     private String user;
     private String subreddit;
     private String postId;
+    private String linkId;
     private String url;
     private Post post;
     protected boolean topSheet;
@@ -185,6 +186,9 @@ public abstract class CustomBottomSheetDialogFragment extends BottomSheetDialogF
         if (getArguments() != null && getArguments().containsKey(FragmentUtils.keyPostId())) {
             setPostId(getArguments().getString(FragmentUtils.keyPostId()));
         }
+        if (getArguments() != null && getArguments().containsKey(FragmentUtils.keyLinkId())) {
+            setLinkId(getArguments().getString(FragmentUtils.keyLinkId()));
+        }
         if (getArguments() != null && getArguments().containsKey(FragmentUtils.keyUrl())) {
             setUrl(getArguments().getString(FragmentUtils.keyUrl()));
         }
@@ -236,6 +240,11 @@ public abstract class CustomBottomSheetDialogFragment extends BottomSheetDialogF
 
     public String getPostId() {
         return this.postId;
+    }
+
+    /** The id of the link (thread) this dialog's post lives under, when provided. */
+    public String getLinkId() {
+        return this.linkId;
     }
 
     public String getSubreddit() {
@@ -304,6 +313,10 @@ public abstract class CustomBottomSheetDialogFragment extends BottomSheetDialogF
 
     public void setPostId(String str) {
         this.postId = str;
+    }
+
+    public void setLinkId(String str) {
+        this.linkId = str;
     }
 
     public void setSubreddit(String str) {

@@ -583,7 +583,7 @@ public class CommentsPresenterImpl implements CommentsPresenter {
         cancelMoreRequest();
         cancelContinueRequest();
         this.view.setMoreCommentsAnimation();
-        OAuthCommentsMoreRequest oAuthCommentsMoreRequest = new OAuthCommentsMoreRequest(this.context, DatabaseIdHelper.buildId(this.postId, this.commentId), this.postId, post.getId(), post.getCommentMoreIds(), post.getListsTime(), post.getLevel(), getPost().getSuggestedSort(), new MoreCommentsResponseListener(), new MoreCommentsErrorListener());
+        OAuthCommentsMoreRequest oAuthCommentsMoreRequest = new OAuthCommentsMoreRequest(this.context, DatabaseIdHelper.buildId(this.postId, this.commentId), this.postId, post.getParentId(), post.getId(), post.getCommentMoreIds(), post.getListsTime(), post.getLevel(), getPost().getSuggestedSort(), new MoreCommentsResponseListener(), new MoreCommentsErrorListener());
         this.moreRequest = oAuthCommentsMoreRequest;
         OAuthRequestManager.send(this.context, oAuthCommentsMoreRequest);
     }

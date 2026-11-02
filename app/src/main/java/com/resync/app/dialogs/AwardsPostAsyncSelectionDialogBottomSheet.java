@@ -48,7 +48,7 @@ public class AwardsPostAsyncSelectionDialogBottomSheet extends AbstractSelection
 
     @Override // com.resync.app.ui.fragment_dialogs.bottom.material_dialogs.base.AbstractSelectionDialogBottomSheet
     public void setupItems() {
-        OAuthRequestManager.sendWithAppContext(new OAuthAwardsRequest("t3_", getPostId(), new AwardsResponseListener(), new Response.ErrorListener() { // from class: t9.h
+        OAuthRequestManager.sendWithAppContext(new OAuthAwardsRequest("t3_", getPostId(), null, new AwardsResponseListener(), new Response.ErrorListener() { // from class: t9.h
             @Override // com.android.volley.Response.ErrorListener
             public final void onErrorResponse(VolleyError volleyError) {
                 AwardsPostAsyncSelectionDialogBottomSheet.this.onAwardsLoadError(volleyError);

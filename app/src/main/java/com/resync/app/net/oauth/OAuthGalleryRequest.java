@@ -25,7 +25,11 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
     }
 
     public static String buildUrl(String str) {
-        return "https://oauth.reddit.com/api/info.json?id=t3_" + LinkHandler.getCommentsId(str.replace("?is_gallery=true", ""));
+        // Reddit no longer answers /api/info for third-party clients (it serves the block page
+        // instead), which is what this request used to resolve a gallery post. /comments/{id}
+        // publishes the same post object including gallery_data and media_metadata, so the
+        // request goes there and the reply is unwrapped from its two-listing thread shape below.
+        return "https://oauth.reddit.com/comments/" + LinkHandler.getCommentsId(str.replace("?is_gallery=true", "")) + ".json?limit=1";
     }
 
     @Override // com.android.volley.Request
@@ -33,7 +37,8 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
         try {
             String str = new String(networkResponse.data);
             Logger.verbose(str);
-            JSONObject jSONObject = new JSONObject(str).getJSONObject("data").getJSONArray("children").getJSONObject(0).getJSONObject("data");
+            // A thread replies with [postListing, commentsListing]; the post is first.
+            JSONObject jSONObject = new JSONArray(str).getJSONObject(0).getJSONObject("data").getJSONArray("children").getJSONObject(0).getJSONObject("data");
             JSONObject jSONObject2 = jSONObject.getJSONObject("media_metadata");
             JSONArray jSONArray = jSONObject.getJSONObject("gallery_data").getJSONArray("items");
             Gallery gallery = new Gallery(jSONArray.length());
@@ -68,7 +73,8 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
                     gallery.captions[index] = "";
                 }
             }
-            gallery.position = new JSONObject(str).optInt("position", 0);
+            // The old /api/info reply never carried a "position" field either, so this was always 0.
+            gallery.position = 0;
             return Response.success(gallery, CustomHttpHeaderParser.parseCacheEntry(networkResponse, DateUtils.MILLIS_PER_HOUR));
         } catch (Exception e) {
             Logger.logException(e);

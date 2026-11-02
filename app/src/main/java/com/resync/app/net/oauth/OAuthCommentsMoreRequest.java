@@ -10,10 +10,13 @@ import com.android.volley.toolbox.HttpHeaderParser;
 import com.resync.app.provider.RedditProvider;
 import com.resync.app.singleton.SettingsSingleton;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import com.resync.app.text.parsing.ContentValuesListHelper;
 import com.resync.app.text.parsing.PostParserHelper;
@@ -28,6 +31,8 @@ public class OAuthCommentsMoreRequest extends RedditRequest<Void> {
     private final String listKey;
 
     private final String fullname;
+    private final String parentFullname;
+    private final String childrenIds;
     private final int position;
     private final int page;
     ArrayList<String> authorFullnames;
@@ -64,25 +69,104 @@ public class OAuthCommentsMoreRequest extends RedditRequest<Void> {
         }
     }
 
-    public OAuthCommentsMoreRequest(Context context, String str, String str2, String str3, String str4, int position, int page, String str5, Response.Listener<Void> listener, Response.ErrorListener errorListener) {
-        super(context, 1, SettingsSingleton.getOauthUrl(context) + "api/morechildren?always_show_media=1&profile_img=true", listener, errorListener);
+    public OAuthCommentsMoreRequest(Context context, String str, String str2, String str3, String str4, String str5, int position, int page, String str6, Response.Listener<Void> listener, Response.ErrorListener errorListener) {
+        // Reddit no longer answers api/morechildren for third-party clients, so this request reads
+        // the comments thread instead (/comments/{link} for a top-level "more", /comments/{link}/_/{parent}
+        // for a nested one) and cuts the reply back down to the flat "things" list morechildren
+        // returned — see extractThings() below. Sent as a GET listing fetch.
+        super(context, 0, buildUrl(context, str2, str3, str6), listener, errorListener);
         this.authorFullnames = new ArrayList<>();
         this.listKey = str;
-        this.fullname = str3;
+        this.fullname = str4;
+        this.parentFullname = StringUtils.isNotEmpty(str3) ? str3 : "t3_" + str2;
+        this.childrenIds = str5;
         this.position = position;
         this.page = page;
-        HashMap map = new HashMap();
-        this.params = map;
-        map.put("link_id", "t3_" + str2);
-        this.params.put("children", str4);
-        this.params.put("api_type", "json");
-        if (StringUtils.isNotEmpty(str5)) {
-            this.params.put("sort", str5.toLowerCase(Locale.ENGLISH));
-        }
-        Logger.verbose("SUGGESTED: " + str5);
         Logger.verbose("t3_" + str2);
-        Logger.verbose(str4);
-        Logger.verbose("Sort: " + str5);
+        Logger.verbose(str5);
+        Logger.verbose("Sort: " + str6);
+    }
+
+    private static String buildUrl(Context context, String linkId, String parentFullname, String sort) {
+        boolean topLevel = parentFullname == null || !parentFullname.startsWith("t1_");
+        StringBuilder sb = new StringBuilder(SettingsSingleton.getOauthUrl(context)).append("comments/").append(linkId);
+        if (!topLevel) {
+            sb.append("/_/").append(parentFullname.substring(3));
+        }
+        // Reddit caps one fetch at 500 comments. At the top level spend them on top-level comments
+        // and their first replies; deeper replies come back as their own "load more" (the nested
+        // case, which loads fully).
+        sb.append(".json?always_show_media=1&profile_img=true&limit=500&depth=").append(topLevel ? 2 : 10);
+        if (StringUtils.isNotEmpty(sort) && !"suggested".equalsIgnoreCase(sort)) {
+            sb.append("&sort=").append(sort.toLowerCase(Locale.ENGLISH).replace("&", ""));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Cuts a thread listing down to the flat list of comments morechildren would have returned: the
+     * requested comments (by id) plus everything under them, pre-order like morechildren so the
+     * indentation Sync derives from the order still works. Deeper "more" nodes under added comments
+     * are kept so they can be loaded in turn.
+     */
+    private static JSONArray extractThings(JSONArray threadChildren, String parentFullname, String childrenIds) throws JSONException {
+        Set<String> wanted = new HashSet<>(Arrays.asList(childrenIds.split(",")));
+        Set<String> shown = new HashSet<>();
+        shown.add(parentFullname);
+        JSONArray things = new JSONArray();
+        if (walk(threadChildren, parentFullname, wanted, shown, things) == 0) {
+            // Nothing new within Reddit's 500 comment window (bottom of a huge thread).
+            return null;
+        }
+        return things;
+    }
+
+    private static int walk(JSONArray children, String parent, Set<String> wanted, Set<String> shown, JSONArray things) throws JSONException {
+        int added = 0;
+        for (int i = 0; i < children.length(); i++) {
+            JSONObject child = children.optJSONObject(i);
+            JSONObject data = child == null ? null : child.optJSONObject("data");
+            if (data == null) {
+                continue;
+            }
+            String parentId = data.optString("parent_id");
+            String kind = child.optString("kind");
+            if ("t1".equals(kind)) {
+                JSONObject replies = data.optJSONObject("replies");
+                // Like morechildren: the requested comments plus everything under them.
+                boolean underAdded = shown.contains(parentId) && !parentId.equals(parent);
+                if (underAdded || (wanted.contains(data.optString("id")) && shown.contains(parentId))) {
+                    data.put("replies", "");
+                    things.put(child);
+                    shown.add(data.optString("name"));
+                    added++;
+                }
+                JSONObject repliesData = replies == null ? null : replies.optJSONObject("data");
+                JSONArray sub = repliesData == null ? null : repliesData.optJSONArray("children");
+                if (sub != null) {
+                    added += walk(sub, parent, wanted, shown, things);
+                }
+            } else if ("more".equals(kind) && shown.contains(parentId)) {
+                // A deeper "load more" under a comment we added: keep it. One directly under the
+                // parent is only useful while it still holds requested comments.
+                if (!parentId.equals(parent) || overlaps(data.optJSONArray("children"), wanted)) {
+                    things.put(child);
+                }
+            }
+        }
+        return added;
+    }
+
+    private static boolean overlaps(JSONArray ids, Set<String> wanted) {
+        if (ids == null) {
+            return false;
+        }
+        for (int i = 0; i < ids.length(); i++) {
+            if (wanted.contains(ids.optString(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override // com.resync.app.net.RedditRequest, com.android.volley.Request
@@ -104,7 +188,13 @@ public class OAuthCommentsMoreRequest extends RedditRequest<Void> {
         try {
             String str = new String(networkResponse.data);
             Logger.verbose(str);
-            JSONArray jSONArray = new JSONObject(str).getJSONObject("json").getJSONObject("data").getJSONArray("things");
+            // A thread replies with [postListing, commentsListing]; the comments are second. For a
+            // nested "more" that listing holds only the parent's subtree, already in depth order.
+            JSONArray threadChildren = new JSONArray(str).getJSONObject(1).getJSONObject("data").getJSONArray("children");
+            JSONArray jSONArray = extractThings(threadChildren, this.parentFullname, this.childrenIds);
+            if (jSONArray == null) {
+                return Response.error(new VolleyError("No more comments within Reddit's fetch window"));
+            }
             int length = jSONArray.length();
             ArrayList<ContentValues> arrayList = new ArrayList();
             int thingIndex = 0;

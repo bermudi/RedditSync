@@ -156,7 +156,7 @@ public class CommentMoreDialogBottomSheet extends AbstractSelectionDialogBottomS
     @Override // com.resync.app.dialogs.interfaces.SelectionDialogBottomSheetInterface
     public void onItemSelected(AbstractSelectionDialogBottomSheet.SelectionItem item) {
         if (item.equals(this.viewAwardsOption)) {
-            FragmentUtils.showWithPostId(AwardsCommentAsyncSelectionDialogBottomSheet.class, getParentFragmentManager(), this.comment.getId());
+            FragmentUtils.showWithPostIdAndLinkId(AwardsCommentAsyncSelectionDialogBottomSheet.class, getParentFragmentManager(), this.comment.getId(), this.comment.getLinkId());
         } else if (item.equals(this.tagUserOption)) {
             NewUserTagManager.toggleTag(getActivity(), this.comment.getAuthor());
             StaticToast.showWithContext(getActivity(), item.toString());
