@@ -31,6 +31,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `/v2/gifs/{id}`, whose `urls.hd`/`urls.sd` are the direct media files.
 - **RedGifs/Gfycat link IDs parsed as empty** when the URL carried a query string or fragment
   around the id (`…/watch/<id>/?92/`), producing 404s.
+- **RedGifs token rejection retries.** A RedGifs request turned away with a stale token now
+  re-runs once with a fresh token instead of surfacing an error.
+- **Threads failing to render when the text contains a `$`.** Matched text handed back as a regex
+  replacement (fenced code blocks, named-link redaction, the selftext preview) was read as group
+  references — silently corrupting the text or throwing. All such replacements are now literal.
+- **Gfycat links dead.** Gfycat's domains no longer resolve; its content moved to RedGifs under
+  the same slugs, so Gfycat requests now resolve through the RedGifs v2 API.
+- **Imgur albums/images need no API key anymore.** They previously required building with an
+  `YOUR_IMGUR_CLIENT_ID`; they are now read from Imgur's own pages (the album's embedded JSON,
+  with the keyless `embed?pub=true` page as fallback), and single images are derived directly.
+  Titled Imgur URLs (`imgur.com/gallery/some-title-words-<id>`) also resolve to the right id now
+  instead of the first word of the title. (A key is still needed for Imgur **uploads**.)
+- **Spoilers: "Missing post information".** Tapping a spoiler now reveals it where it sits
+  instead of attempting a rewrite of the post body that no longer matched what was stored.
+- **`/s/` share links.** Reddit's shortened share links now resolve to the post they point at
+  and open in-app (an authorized HEAD reads the destination; failures fall back to the in-app
+  browser).
+- **Deprecated `/u/` profile endpoint** replaced with `/user/` everywhere.
+- **Album "reopen where I left off"** no longer depends on rewriting the cached response body
+  (which broke with the new response shapes); the position is kept beside the album instead.
 
 ## [1.0.3] - 2026-06-22
 

@@ -64,7 +64,9 @@ public abstract class RedditHelper {
                     if (zContains) {
                         strReplaceAll = strReplaceAll.replace("<code>", "<" + SyncHtmlUtils.SAMP + ">").replace("</code>", "</" + SyncHtmlUtils.SAMP + ">");
                     }
-                    matcher.appendReplacement(stringBuffer, strReplaceAll);
+                    // Code block text goes back in as a regex replacement string; $ and \ in it
+                    // would otherwise be read as group references (corrupted text, or a throw).
+                    matcher.appendReplacement(stringBuffer, Matcher.quoteReplacement(strReplaceAll));
                 }
             } catch (IndexOutOfBoundsException e) {
                 Logger.logException(e);
@@ -79,7 +81,9 @@ public abstract class RedditHelper {
         Matcher matcher = Pattern.compile("```(.*?)```", 32).matcher(str);
         while (matcher.find()) {
             try {
-                matcher.appendReplacement(stringBuffer, StringUtils.replaceFirst(StringUtils.replaceFirst(matcher.group(0).replaceAll("\n", "\n    "), "```", "    "), "```", "    \n-"));
+                // Fenced code is not $-escaped before this (unlike escapeCodeBlocks), so a $ in it
+                // reaches appendReplacement as a group reference and breaks the thread's rendering.
+                matcher.appendReplacement(stringBuffer, Matcher.quoteReplacement(StringUtils.replaceFirst(StringUtils.replaceFirst(matcher.group(0).replaceAll("\n", "\n    "), "```", "    "), "```", "    \n-")));
             } catch (IndexOutOfBoundsException e) {
                 Logger.logException(e);
             }
@@ -113,16 +117,16 @@ public abstract class RedditHelper {
                     if (!TextUtils.isEmpty(strReplaceAll)) {
                         strReplaceAll = strReplaceAll.trim();
                     }
-                    matcher.appendReplacement(stringBuffer, "[" + strReplaceAll.replaceAll(".", "█") + "](" + URLEncoder.encode(strReplaceAll) + ")");
+                    matcher.appendReplacement(stringBuffer, Matcher.quoteReplacement("[" + strReplaceAll.replaceAll(".", "█") + "](" + URLEncoder.encode(strReplaceAll) + ")"));
                 } else if (TextUtils.isEmpty(strGroup2) || TextUtils.isEmpty(strGroup)) {
-                    matcher.appendReplacement(stringBuffer, "[" + strGroup2.replaceAll(".", "█") + "](" + URLEncoder.encode(strGroup2) + ")");
+                    matcher.appendReplacement(stringBuffer, Matcher.quoteReplacement("[" + strGroup2.replaceAll(".", "█") + "](" + URLEncoder.encode(strGroup2) + ")"));
                 } else {
                     String strReplaceAll2 = strGroup.replaceAll("\"", "");
                     String strReplaceAll3 = strGroup2.replaceAll("\"", "");
                     if (!TextUtils.isEmpty(strReplaceAll3)) {
                         strReplaceAll3 = strReplaceAll3.trim() + ": ";
                     }
-                    matcher.appendReplacement(stringBuffer, "[" + strReplaceAll3 + strReplaceAll2.replaceAll(".", "█") + "](" + URLEncoder.encode(strReplaceAll2) + ")");
+                    matcher.appendReplacement(stringBuffer, Matcher.quoteReplacement("[" + strReplaceAll3 + strReplaceAll2.replaceAll(".", "█") + "](" + URLEncoder.encode(strReplaceAll2) + ")"));
                 }
             }
         }

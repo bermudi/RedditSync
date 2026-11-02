@@ -24,7 +24,7 @@ public class OAuthFriendRequest extends RedditRequest<Void> {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        RedditApplication.oauthRequestQueue.getCache().remove("https://oauth.reddit.com/u/" + str + "/about.json");
+        RedditApplication.oauthRequestQueue.getCache().remove("https://oauth.reddit.com/user/" + str + "/about.json");
     }
 
     public static String buildUrl(Context context, String str) {

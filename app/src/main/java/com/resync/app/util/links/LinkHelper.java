@@ -40,6 +40,11 @@ public abstract class LinkHelper {
         if (TextUtils.isEmpty(url)) {
             return false;
         }
+        // Reddit's /s/ share links: resolve to the post they point at before anything else
+        // touches them (nothing below knows their shape).
+        if (SLinkResolver.handle(context, url)) {
+            return true;
+        }
         if (url.contains("reddit.com/link/") && url.contains("/video/")) {
             StaticToast.debugToast("Opening strange reddit video link");
             LinkHandler.openCustomTab(context, url);

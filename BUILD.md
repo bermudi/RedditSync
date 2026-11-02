@@ -45,7 +45,7 @@ To add a key, open the listed file(s) and replace the placeholder string with yo
 | Placeholder | Needed for | Required? |
 |---|---|---|
 | `YOUR_YOUTUBE_DATA_API_KEY` | In-app YouTube playback | Optional |
-| `YOUR_IMGUR_CLIENT_ID` | Imgur album/image viewing | Optional |
+| `YOUR_IMGUR_CLIENT_ID` | Imgur **uploads** only (viewing needs no key) | Optional |
 | `YOUR_RAPIDAPI_KEY` | Imgur **uploads** | Optional |
 | `YOUR_REDDIT_CLIENT_ID` | Legacy Reddit OAuth login | **Not needed** (app uses a different sign-in) |
 
@@ -61,16 +61,16 @@ Without it, YouTube links open in the external YouTube app instead of the in-app
    - `app/src/main/java/com/resync/app/ui/activities/CustomYouTubeVideoActivity.java` (2 occurrences)
    - `app/src/main/java/com/resync/app/dialogs/UrlSelectionDialogBottomSheet.java`
 
-### Imgur Client-ID
+### Imgur Client-ID (uploads only)
 
-Without it, Imgur albums/images won't load via the Imgur API.
+**Viewing Imgur albums and images needs no key** — they are read from Imgur's own pages
+(the album page / the keyless embed page), not the Imgur API. The Client-ID is only used by the
+in-app **upload** path:
 
 1. Register an application at <https://api.imgur.com/oauth2/addclient>.
 2. Choose **"OAuth 2 authorization without a callback URL"** (anonymous usage — you only need the
    **Client ID**, not the secret).
 3. Replace `YOUR_IMGUR_CLIENT_ID` in:
-   - `app/src/main/java/com/resync/app/net/thirdparty/ImgurGalleryRequest.java`
-   - `app/src/main/java/com/resync/app/net/thirdparty/ImgurSingleImageRequest.java`
    - `app/src/main/java/com/resync/app/net/thirdparty/UploadImgurRequest.java`
 
 ### RapidAPI key (Imgur uploads only)

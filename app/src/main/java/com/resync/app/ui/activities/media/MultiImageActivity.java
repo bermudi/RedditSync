@@ -44,6 +44,7 @@ import com.resync.app.net.thirdparty.ImgurGalleryRequest;
 import com.resync.app.net.thirdparty.ImgurSingleImageRequest;
 import com.resync.app.dialogs.FragmentUtils;
 import com.resync.app.dialogs.DownloadAlbumAlertDialogBottomSheet;
+import com.resync.app.util.GalleryPositions;
 import com.resync.app.util.Logger;
 import com.resync.app.util.TextUtils;
 import com.resync.app.util.links.LinkTypeHelper;
@@ -509,30 +510,15 @@ public class MultiImageActivity extends AbstractImageActivity {
             if (!TextUtils.isEmpty(getContentUrl())) {
                 if (getContentUrl().contains("imgur")) {
                     try {
-                        int currentItem = this.mViewPager.getCurrentItem();
-                        Cache.Entry entry = RedditApplication.thirdPartyRequestQueue.getCache().get(ImgurGalleryRequest.buildUrl(getContentUrl()));
-                        JSONObject jSONObject = new JSONObject(new String(entry.data));
-                        if (jSONObject.has("position")) {
-                            jSONObject.remove("position");
-                        }
-                        jSONObject.put("position", currentItem);
-                        entry.data = jSONObject.toString().getBytes();
-                        RedditApplication.thirdPartyRequestQueue.getCache().put(ImgurGalleryRequest.buildUrl(getContentUrl()), entry);
+                        // Remember where the album was left; the request reads it back on reopen.
+                        GalleryPositions.save(ImgurGalleryRequest.buildUrl(getContentUrl()), this.mViewPager.getCurrentItem());
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
                 }
                 if (LinkTypeHelper.isGallery(getContentUrl())) {
                     try {
-                        int currentItem = this.mViewPager.getCurrentItem();
-                        Cache.Entry entry2 = RedditApplication.oauthRequestQueue.getCache().get(OAuthGalleryRequest.buildUrl(getContentUrl()));
-                        JSONObject jSONObject2 = new JSONObject(new String(entry2.data));
-                        if (jSONObject2.has("position")) {
-                            jSONObject2.remove("position");
-                        }
-                        jSONObject2.put("position", currentItem);
-                        entry2.data = jSONObject2.toString().getBytes();
-                        RedditApplication.oauthRequestQueue.getCache().put(OAuthGalleryRequest.buildUrl(getContentUrl()), entry2);
+                        GalleryPositions.save(OAuthGalleryRequest.buildUrl(getContentUrl()), this.mViewPager.getCurrentItem());
                     } catch (Exception e) {
                         e.printStackTrace();
                     }

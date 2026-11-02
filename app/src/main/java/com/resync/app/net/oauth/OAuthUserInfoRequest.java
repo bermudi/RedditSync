@@ -24,7 +24,7 @@ public class OAuthUserInfoRequest extends RedditRequest<User> {
     }
 
     private static String buildUrl(Context context, String str) {
-        return SettingsSingleton.getOauthUrl(context) + "u/" + str + "/about.json";
+        return SettingsSingleton.getOauthUrl(context) + "user/" + str + "/about.json";
     }
 
     @Override // com.android.volley.Request

@@ -567,7 +567,9 @@ public abstract class PostParserHelper {
                                             var26.put("sync_type", 2);
                                             var26.put("selftext_raw", var195);
                                             var26.put("selftext_processed", var89);
-                                            String var129 = var89.replaceAll("\\&#x200B\\;", var21);
+                                            // Literal replace: a $ in the replacement must not be
+                                            // read as a regex group reference.
+                                            String var129 = var89.replace("&#x200B;", var21);
                                             String var90 = var129;
                                             if (var129 != null) {
                                                 var90 = StringUtils.trimToNull(var129);
@@ -599,7 +601,7 @@ public abstract class PostParserHelper {
 
                                                 SpannableStringBuilder var92 = (SpannableStringBuilder) Html.fromHtml(var91);
                                                 var92.clearSpans();
-                                                String var93 = var92.toString().replaceAll("￼", var21).trim();
+                                                String var93 = var92.toString().replace("￼", var21).trim();
                                                 var131 = var93;
                                                 if (var60) {
                                                     var131 = var93 + "\n…";

@@ -52,7 +52,7 @@ public class OAuthSubredditInfoRequest extends RedditRequest<Subreddit> {
         if (!MaterialPostsHelper.isUserProfile(str)) {
             return SettingsSingleton.getOauthUrl(context) + "r/" + str + "/about.json";
         }
-        return SettingsSingleton.getOauthUrl(context) + "u/" + MaterialPostsHelper.extractProfileUsername(str) + "/about.json";
+        return SettingsSingleton.getOauthUrl(context) + "user/" + MaterialPostsHelper.extractProfileUsername(str) + "/about.json";
     }
 
     @Override // com.resync.app.net.RedditRequest, com.android.volley.Request
@@ -173,7 +173,7 @@ public class OAuthSubredditInfoRequest extends RedditRequest<Subreddit> {
     }
 
     public OAuthSubredditInfoRequest(String str, Response.Listener<Subreddit> listener, Response.ErrorListener errorListener) {
-        super(RedditApplication.getAppContext(), 0, SettingsSingleton.getOauthUrl() + "u/" + str + "/about.json", listener, errorListener);
+        super(RedditApplication.getAppContext(), 0, SettingsSingleton.getOauthUrl() + "user/" + str + "/about.json", listener, errorListener);
         this.subreddit = MaterialPostsHelper.buildOverviewProfileAddress(str);
         setShouldCache(true);
     }

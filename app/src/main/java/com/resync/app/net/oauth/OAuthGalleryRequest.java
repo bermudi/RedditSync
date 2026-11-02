@@ -10,6 +10,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import com.resync.app.net.CustomHttpHeaderParser;
 import com.resync.app.model.Gallery;
+import com.resync.app.util.GalleryPositions;
 import com.resync.app.util.Logger;
 import com.resync.app.util.WebsafeUtils;
 import com.resync.app.net.RedditRequest;
@@ -73,8 +74,8 @@ public class OAuthGalleryRequest extends RedditRequest<Gallery> {
                     gallery.captions[index] = "";
                 }
             }
-            // The old /api/info reply never carried a "position" field either, so this was always 0.
-            gallery.position = 0;
+            // Where the viewer last left this album (used to ride in the cached reply body).
+            gallery.position = GalleryPositions.get(getUrl());
             return Response.success(gallery, CustomHttpHeaderParser.parseCacheEntry(networkResponse, DateUtils.MILLIS_PER_HOUR));
         } catch (Exception e) {
             Logger.logException(e);

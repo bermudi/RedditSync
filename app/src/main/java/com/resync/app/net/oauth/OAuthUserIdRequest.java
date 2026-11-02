@@ -15,7 +15,7 @@ import com.resync.app.net.RedditRequest;
 /* JADX INFO: loaded from: classes.dex */
 public class OAuthUserIdRequest extends RedditRequest<String> {
     public OAuthUserIdRequest(Context context, String str, Response.Listener<String> listener, Response.ErrorListener errorListener) {
-        super(context, 0, SettingsSingleton.getOauthUrl(context) + "u/" + str + "/about.json", listener, errorListener);
+        super(context, 0, SettingsSingleton.getOauthUrl(context) + "user/" + str + "/about.json", listener, errorListener);
     }
 
     @Override // com.android.volley.Request

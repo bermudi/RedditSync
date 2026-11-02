@@ -80,7 +80,13 @@ public final class ImgurImageHelper {
                 str = str.split("\\.")[0];
             }
             if (str.contains("-")) {
-                str = str.split("\\-")[0];
+                // Imgur URLs can carry a title slug: imgur.com/gallery/some-title-words-rE6KsRD.
+                // The id is the token after the last dash where that looks like one (imgur ids are
+                // 4-12 letters/digits); anything else (suffixes like "-mobile") keeps the old
+                // first-token behavior.
+                String[] dashParts = str.split("-");
+                String last = dashParts[dashParts.length - 1];
+                str = last.matches("[A-Za-z0-9]{4,12}") ? last : dashParts[0];
             }
             String strReplace = str.replace("`", "");
             return strReplace.endsWith("_d") ? StringUtils.stripEnd(strReplace, "_d") : strReplace;
