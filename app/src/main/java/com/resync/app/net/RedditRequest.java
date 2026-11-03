@@ -98,7 +98,8 @@ public abstract class RedditRequest<T> extends Request<T> {
                                             RedditRequest.this.deliverError(parsed.error != null ? parsed.error
                                                     : new VolleyError("web scrape parse failed"));
                                         } catch (Exception e) {
-                                            android.util.Log.i("WebView403", "scrape dispatch: " + e);
+                                            android.util.Log.i("WebView403", "scrape dispatch: " + e
+                                                    + " body=" + json.substring(0, Math.min(800, json.length())));
                                             RedditRequest.this.deliverError(new VolleyError("web scrape: " + e));
                                         }
                                     } else {
