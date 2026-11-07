@@ -50,3 +50,8 @@
   phase/status/count messages via `android.util.Log`.
 - `scripts/test-media.sh` offline checks verify pure helper contracts only. They cannot
   stand in for Android/Volley compilation, live endpoint behavior, or device evidence.
+- Preview image transformations must match the requested `ImageView.ScaleType`
+  (`FIT_CENTER -> fitCenter()`, `CENTER_CROP -> centerCrop()` in `CustomImageView.load`).
+  A circular bitmap transformation belongs only to explicit avatar/icon callers (e.g. the
+  tabbed-comments chip); wrapper rounded corners (`shape_round_corners`/`shape_circular`
+  attrs) are a separate outline mechanism and must not be conflated with bitmap crops.

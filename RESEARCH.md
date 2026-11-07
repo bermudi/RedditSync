@@ -569,3 +569,41 @@ by this device (Xiaomi HyperOS `Install via USB` gate: INSTALL_FAILED_USER_RESTR
 twice). The APK was pushed to the phone instead: `/sdcard/Download/resync-1.0.3-media.apk`
 (118,530,294 bytes, matches the CI artifact). Manual install and any on-device behavior
 remain operator-side and unverified.
+
+## First device failures and the preview scale mapping fix (2026-11-07)
+
+Fresh install of built source `0e7e578` (CI run `42407961687`). Operator screenshots show
+three behaviors: initial comments area empty/spinning, an "Error loading album" toast, and
+an oval post preview in the comments view while the same gallery preview is rectangular in
+the feed.
+
+The oval preview is a verified source defect, fixed on this branch:
+`CustomImageView.load(..., scaleType, ...)` mapped the requested scale type to the wrong
+Glide bitmap transformation — `FIT_CENTER -> centerCrop()` and `CENTER_CROP -> circleCrop()`.
+Source call chain with default settings: `CommentHeaderHolder` builds the post header and calls
+`setPreviewMode()` -> `applyCommentMode()` -> `calculateLayout()`, where the default-on
+`commentMediaCropped` setting (`media_preview_cropped`, default true) forces
+`CENTER_CROP` -> `circleCrop()`. The feed binds the same holder without comment mode and
+takes the `FIT_CENTER` branch, which is why feed previews looked correct. The fix swaps the
+two transform calls to `fitCenter()`/`centerCrop()`. Compilation and rendered behavior are
+NOT RUN locally; verification is deferred to the scenarios below.
+
+The comments and album failures remain explicitly unresolved. Both hit the same endpoint
+family `oauth.reddit.com/comments/<id>.json` through `OAuthRequestManager.sendAuthenticated`
+(the same transport the working feed listings use); the actual HTTP status or response shape
+on device is unknown, so no transport, auth, or JSON change is guessed here. The album toast
+text rules out the null-gallery ("This gallery had no images") and Imgur
+("...opening in browser") paths.
+
+Deferred observation scenarios for the next installed build:
+(a) the same gallery post opened in comments view with the default cropped-media setting
+should render rectangular and fill the bounds, not oval;
+(b) a full-height/FIT_CENTER preview keeps the whole image and aspect ratio, no center
+trimming;
+(c) feed previews and intentionally circular avatars/icons stay unchanged;
+(d) comments and album loading still need separate HTTP/parse diagnosis and are not counted
+fixed by this change.
+
+Proposed next observation, needing operator permission first: read only the already
+sanitized `RedditGallery` status/phase log tag over USB while the operator drives one album
+attempt. No broad log dump, cookies, app data, credentials, or automatic screen driving.

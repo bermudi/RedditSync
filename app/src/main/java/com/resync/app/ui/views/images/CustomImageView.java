@@ -256,9 +256,9 @@ public class CustomImageView extends AppCompatImageView implements RecyclableVie
             requestBuilder = (RequestBuilder) requestBuilder.override(width, height);
         }
         if (scaleType == ImageView.ScaleType.FIT_CENTER) {
-            requestBuilder = (RequestBuilder) requestBuilder.centerCrop();
+            requestBuilder = (RequestBuilder) requestBuilder.fitCenter();
         } else if (scaleType == ImageView.ScaleType.CENTER_CROP) {
-            requestBuilder = (RequestBuilder) requestBuilder.circleCrop();
+            requestBuilder = (RequestBuilder) requestBuilder.centerCrop();
         }
         if (crossFade && !this.disableCrossFade) {
             requestBuilder = requestBuilder.transition(DrawableTransitionOptions.withCrossFade(220));
