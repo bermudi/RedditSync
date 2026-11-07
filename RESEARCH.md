@@ -537,3 +537,26 @@ Still unresolved, by scope: Imgur albums remain blocked on the placeholder `Clie
 YOUR_IMGUR_CLIENT_ID` (gallery, single-image, upload requests) — an operator credential decision;
 v.redd.it playback failures still lack evidence (player internals untouched this pass);
 authentication and WebSessionManager untouched; comments untouched.
+
+## First CI build of the source-media branch
+
+2026-11-07. Pushed `repair/source-media-first-pass` to origin and built it with GitHub
+Actions (workflow `.github/workflows/build.yml`, the same file the repository's
+`fix/reddit-api-blocks-2026-11` branch already used). Three branch commits were needed to
+make this lineage buildable in CI: carrying the workflow file, restoring the executable
+bit on `gradlew` (tracked 644 here, 755 on the fix branch), and dropping the machine-specific
+`org.gradle.java.home` Windows path from `gradle.properties`.
+
+Run `42407961687` (commit `0e7e578`) completed successfully: `assembleDebug` +
+`assembleRelease` both green. This is the first full Android/Volley compilation of the
+source-media changes (all new request classes compile).
+
+Downloaded artifact: `resync-release-apk` ->
+`~/build/RedditSync-apks/resync-0e7e578/app-release.apk` (118,530,294 bytes, SHA-256
+`24c859eba8a6dac23013df196d0273cf15c4f4a82b9ebf12fa5c4c3146745e48`, debug-signed release
+per `app/build.gradle`, installs as `com.resync.app`). The debug artifact from the same
+run was not downloaded (limited data plan).
+
+A green build proves compilation only. Nothing has been installed or exercised on a
+device: galleries, RedGifs playback, feeds, and login remain unverified until the operator
+installs this APK and tries the previously failing posts.
