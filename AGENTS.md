@@ -15,6 +15,14 @@
   or a separate app-registration screenshot. Identify its patch source/version
   or inspect the APK. Website-session authentication and website scraping are
   different mechanisms; one does not establish the other.
+- The operator's original Sync APK was copied over authorized USB for static
+  inspection. It has standard OAuth token requests, a patched fixed client
+  authorization header, a RedReader-scheme redirect, and a RedReader user agent.
+  Its gallery request still builds `/api/info.json`; RedGifs and video-download
+  hooks are already wired. These are code findings, not live network tests.
+- Keep that APK and all embedded credential values outside Git and chat. Do not
+  read app data or logs to investigate login; the private installation-file copy
+  is sufficient for static inspection.
 - Reddit galleries and Imgur albums have separate request paths. Diagnose each
   separately; an Imgur client ID does not fix Reddit gallery lookup.
 - Sync Up is a patch bundle for original Sync APKs, not this renamed ReSync source.

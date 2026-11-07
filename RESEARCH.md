@@ -114,7 +114,8 @@ claims have not been independently verified.
 
 ## Inputs needed before implementation
 
-- Phone model, Android version, and installed Sync variant/version, if any.
+- Phone model and original Sync version are now supplied; authorized USB reads
+  confirm Android 16. The app-info screenshot shows `v23.06.30-13:39`.
 - One failing Reddit album link; an Imgur example too if that is also broken.
 - Operator's choice: patch an original Sync APK, or work on this ReSync source.
   The patch route needs a matching unmodified APK; ReSync does not.
@@ -140,8 +141,9 @@ copied into this repository.
 This establishes that a registration exists, not that Reddit currently accepts
 its authorization or API requests. The first screenshot did not show the redirect
 URI; the subsequent screenshot shows `http://redditsync/auth`. The value requested
-by a patched app must match its registration. The Android version and original
-Sync version are still unknown.
+by a patched app must match its registration if that registration is used.
+Later evidence below supplies the original Sync version and Android version and
+shows that the installed APK uses a different redirect.
 
 An existing usable client could support the original Sync patch route without
 first creating a new API registration. Whether it is usable remains unverified.
@@ -220,6 +222,9 @@ No account credentials were requested or used.
 
 ## Correction: installed ReVanced build's authentication is unknown
 
+This section records the earlier uncertainty. The USB inspection below now
+identifies the installed code's login mechanism.
+
 The operator clarifies that their installed ReVanced-patched Sync does not use
 their Reddit app token and suspects it uses a browser-style mechanism. Do not
 treat the separate app registration as a dependency of this installed build.
@@ -252,3 +257,105 @@ The useful next input is a copy of the installed Sync APK. Its patched code can
 be inspected without changing the installed app or requiring the original patch
 files. Do not request account tokens, cookies, or a private app-data export.
 No phone connection, export, app, or registration was accessed or changed.
+
+## Authorized USB inspection of original Sync
+
+### Acquisition and limits
+
+After the operator indicated USB debugging was enabled, one authorized device
+was visible. Read-only property queries confirmed Android 16 and arm64-v8a.
+The screenshot identifies original Sync `v23.06.30-13:39`.
+
+`pm path com.laurencedawson.reddit_sync` returned one installed APK. Only that
+installation file was copied over USB:
+
+- Private local copy: `/tmp/redditsync-installed.ItJo2t/sync-installed.apk`
+- Size: 73,361,759 bytes.
+- SHA-256: `e59940dc6557aaa7f524dc5fcd8d2ebd3c740d5206fdbf72f9e8b60f5da93b18`
+
+No app data, preferences, login cookies, account tokens, or device logs were read.
+No app was opened, stopped, installed, uninstalled, patched, or cleared. No remote
+dependency or binary was downloaded. The APK is not tracked by Git.
+
+### Login: static evidence
+
+The installed APK uses a native OAuth flow with patched client identification:
+
+- `classes3.dex`, `Lb9/a;`: exchanges an authorization code through
+  `https://www.reddit.com/api/v1/access_token`.
+- `Lb9/c;` and `Lb9/d;`: refresh-token requests through the same endpoint.
+- `classes4.dex`, `Lw8/b;->c()`: returns a patched fixed Basic authorization
+  header before the original construction code. Its value was redacted.
+- `Lw8/b;->f()`: returns a `redreader://` redirect before the now-unreachable
+  original `http://redditsync/auth` return.
+- `classes2.dex`,
+  `Lcom/laurencedawson/reddit_sync/singleton/a;->g()`: returns a user agent
+  identifying RedReader.
+
+Across all five DEX files, no markers for `/svc/shreddit/token`, `shreddit-post`,
+`shreddit-comment`, or `WebSessionManager` were found. Browser user-agent strings
+do exist in unrelated libraries and generic web components; they do not establish
+the app's Reddit login mechanism.
+
+The code therefore supports a RedReader-style OAuth identity, not ReSync's
+website-token and comments-scraping implementation. This does not prove which
+remote app owns the embedded client identifier, that a fresh login currently
+works, or that this use has approval. No embedded authorization value was printed
+or copied into this report.
+
+### Gallery: static evidence and likely diagnosis
+
+`classes3.dex`, `Ly8/q;->b(String)`, still constructs the Reddit gallery lookup
+using `/api/info.json` and a post ID. Its response parser expects `gallery_data`
+and `media_metadata`. Another old lookup appears in `classes4.dex`, `Ly8/c;`.
+
+This matches the old request pattern addressed by Sync Up's album fix. Together
+with the operator's screenshot showing an album error after a thumbnail loads,
+it is a strong diagnostic lead. The specific failing request and its HTTP status
+were not captured, so this is not a live confirmation of the server-side cause.
+
+### Video: do not assume the patches are absent
+
+The inspection found application call sites, not merely bundled class names:
+
+- `classes4.dex`, `La8/a;->k()`, calls
+  `FixRedgifsApiPatch.install(OkHttpClient.Builder)`.
+- `classes.dex`, `Lr8/g;->parseNetworkResponse(...)`, calls
+  `FixRedditVideoDownloadPatch.getLinks(...)`.
+- Share-link resolver hooks are also wired in application code.
+
+The RedGifs hook installs a request interceptor and contains a temporary-token
+request to that host. Whether it succeeds for a failing video is unverified.
+The Reddit video-download hook is not proof that playback works.
+
+A failing video permalink is still needed to identify the host and exact path.
+Do not claim all video failures share the gallery cause.
+
+### Inspection evidence and tool failures
+
+The standard `apkanalyzer` command failed because this SDK lacks build tools.
+The bundled baksmali CLI also failed with a JCommander method mismatch.
+Neither was repaired by downloading dependencies.
+
+Instead, a temporary offline Java inspector used the SDK's existing dexlib2
+library. It emits method/call names and allowlisted marker labels, while redacting
+other string literals and suppressing field values. This is static analysis of
+the real extracted APK, not a simulated app test.
+
+Local evidence files beside the APK:
+
+- `audit-inventory-final.txt`: whole-APK marker inventory and active patch calls.
+- `audit-auth-profile-redacted.txt`: redacted login-method instructions.
+- `audit-details-redacted.txt`: redacted token, gallery, and RedGifs instructions.
+- `DexAudit.java` and `DexAudit.class`: the temporary inspection helper.
+
+To re-open the relevant code without accessing the phone or printing credentials:
+
+```sh
+cd /tmp/redditsync-installed.ItJo2t && java -Xmx512m \
+  -cp ".:$HOME/Android/Sdk/cmdline-tools/latest/lib/apkanalyzer-classpath.jar" \
+  DexAudit sync-installed.apk 'Lw8/b;' 'Ly8/q;'
+```
+
+No replacement APK has been produced, and no media playback or authenticated
+network request was tested.
