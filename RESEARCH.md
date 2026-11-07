@@ -560,3 +560,12 @@ run was not downloaded (limited data plan).
 A green build proves compilation only. Nothing has been installed or exercised on a
 device: galleries, RedGifs playback, feeds, and login remain unverified until the operator
 installs this APK and tries the previously failing posts.
+
+## Device install attempt (2026-11-07)
+
+The old ReSync 1.0.9 (com.resync.app, different CI signing key, higher versionCode)
+was uninstalled with operator approval. Direct `adb install` of the new build is blocked
+by this device (Xiaomi HyperOS `Install via USB` gate: INSTALL_FAILED_USER_RESTRICTED
+twice). The APK was pushed to the phone instead: `/sdcard/Download/resync-1.0.3-media.apk`
+(118,530,294 bytes, matches the CI artifact). Manual install and any on-device behavior
+remain operator-side and unverified.
