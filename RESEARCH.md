@@ -454,3 +454,20 @@ provide code-level evidence. None of these findings proves a repaired APK works.
 
 Only small metadata, source-file, and history reads were made. No clone, patch
 bundle, dependency, or additional APK was downloaded; no app code was changed.
+
+## Source-repair execution request and launch gate
+
+The operator authorized starting the source repair with Fusion, using the
+`piz` harness and `glm-5.3`. Both the Herdr and piz launch tools are installed.
+The installed piz help identifies it as a ZCode-core client with model selection.
+
+The lead is not in a Herdr-managed pane and no explicit Herdr connection was
+supplied. The local Herdr skill requires an explicit session/socket selection
+before controlling panes from outside Herdr. The model's provider also has not
+been selected or verified. No helper session, pane, worktree, or app edit was
+started while those choices are pending.
+
+There is a separate final-build gate: the project requires CI-only builds but
+currently prohibits pushes and large downloads. Permission for a feature-branch
+push and the resulting APK download is needed before that validation/delivery
+step. Nothing was pushed, pulled, or built during this launch check.
