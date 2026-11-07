@@ -104,7 +104,9 @@ release-page evidence. No patch bundle or app binary was downloaded.
   files, but the inspected SDK has no platform or build-tools directories.
 - No default Gradle cache/wrapper distributions were found; `GRADLE_USER_HOME`
   is unset. The wrapper specifies Gradle 8.7. No tracked APK was found.
-- No tracked CI workflow was found. No feature work or CI setup was started.
+- No tracked CI workflow was found in this local snapshot. The later remote
+  1.0.9 commit has a build workflow, inspected in the follow-up below. No feature
+  work or CI setup was started.
 
 No build, app launch, device interaction, login, or live authenticated API request
 was performed. No dependencies or APKs were downloaded. Existing README build/run
@@ -136,9 +138,10 @@ the `installed app` type. Its client ID and account details are deliberately not
 copied into this repository.
 
 This establishes that a registration exists, not that Reddit currently accepts
-its authorization or API requests. The next configuration detail to obtain is
-the registered redirect URI; it was not visible in the screenshot. The Android
-version and installed Sync version, if any, are also still needed.
+its authorization or API requests. The first screenshot did not show the redirect
+URI; the subsequent screenshot shows `http://redditsync/auth`. The value requested
+by a patched app must match its registration. The Android version and original
+Sync version are still unknown.
 
 An existing usable client could support the original Sync patch route without
 first creating a new API registration. Whether it is usable remains unverified.
@@ -147,3 +150,70 @@ evidence of an external Android client's OAuth setup.
 
 No app configuration, login, live API request, or build was performed in this
 follow-up.
+
+## Follow-up: working original Sync and failed ReSync 1.0.9
+
+### Operator evidence
+
+The operator reports that their ReVanced-patched original Sync loads feeds,
+images, and comments, but most videos and galleries fail. They also report that
+ReSync 1.0.9 does not work adequately. These are operator observations, not device
+tests performed by this agent.
+
+Some working Reddit access is therefore reported. This does not prove that every
+API endpoint works, that the registered client shown is the client being used,
+or that a new login will succeed. New API registration or Devvit setup is not
+the first diagnostic step for this reported media problem.
+
+### Linked build: verified metadata and source
+
+GitHub run `41551254214` completed successfully on November 3, 2026 at
+00:16:16 UTC, for commit `3e00feb1d28f224844fda096b419422e02709b4d`.
+Its workflow assembles debug/release APKs and uploads them. It does not install
+the app or exercise feeds, login, galleries, or video playback.
+
+The commit changes five lines in `OAuthCommentsRequest.java`, correcting which
+web-page attributes its comments scraper reads. In the full file at that commit,
+the scraper constructs post data with `is_video:false`, `media:null`,
+`secure_media:null`, and `preview:null`; it sets a gallery flag without constructing
+`gallery_data` or `media_metadata`. That path demonstrably supplies incomplete
+media data. Its role in the operator's particular failures is unverified.
+
+A successful build is therefore not evidence that ReSync 1.0.9 works as a client.
+The local checkout is older (1.0.3); none of the remote changes were pulled.
+
+Sources inspected through GitHub's API:
+
+1. https://github.com/bermudi/RedditSync/actions/runs/41551254214
+2. https://github.com/bermudi/RedditSync/commit/3e00feb1d28f224844fda096b419422e02709b4d
+3. The workflow at that commit, obtained using the run's `path` field.
+4. https://github.com/bermudi/RedditSync/blob/3e00feb1d28f224844fda096b419422e02709b4d/app/src/main/java/com/resync/app/net/oauth/OAuthCommentsRequest.java
+
+### Original-Sync patch route
+
+GitHub's latest-release API returned Sync Up `v1.9.4`, published October 31, 2026.
+Its single listed patch-bundle asset is 1,059,981 bytes; no asset was downloaded.
+The README pinned to that tag lists:
+
+- `Fix opening albums`: replaces the old Reddit post-lookup request.
+- `Fix Imgur links`: replaces Sync's retired Imgur proxy path.
+- `Fix Redgifs API`: updates requests to that video host.
+- `Fix loading more comments`: replaces the old additional-comments request.
+
+Its `Fix video downloads` patch concerns downloaded files, not a general promise
+to repair playback. Deleted media is not made available merely by patching.
+The maintainer warns that not all patches are tested.
+
+Sources:
+
+1. https://github.com/RashKash103/sync-up/releases/tag/v1.9.4
+2. https://github.com/RashKash103/sync-up/blob/v1.9.4/README.md
+3. https://github.com/RashKash103/sync-up/blob/v1.9.4/patches/src/main/kotlin/app/morphe/patches/reddit/customclients/sync/syncforreddit/api/SpoofClientPatch.kt
+
+Recommendation, not an implemented change: keep the existing install intact and
+evaluate a patched original Sync before investing further in reconstructed
+ReSync. Identify the original Sync version/variant and obtain one failing gallery
+and one failing video post. Their actual media hosts are not yet known.
+
+No APK was built, downloaded, patched, installed, or tested in this follow-up.
+No account credentials were requested or used.

@@ -18,6 +18,8 @@
   address requested by the app must match its registration.
 - **ReSync:** The unofficial reconstruction in this repository, installed as
   `com.resync.app`. It is not the original developer's Sync release.
+- **ReVanced:** A tool/project for applying patches to existing Android apps.
+  A ReVanced-patched original Sync is distinct from a ReSync source build.
 - **SDK:** A software development kit. Android builds need platform files and
   build tools from the Android SDK.
 - **Signing key:** The private key used to identify who produced an APK. Android
@@ -27,3 +29,5 @@
 - **Web session:** Browser login state stored in cookies. Cookies and access
   tokens must remain private.
 - **WebView:** Android's embedded browser component.
+- **Website scraping:** Extracting data from web pages instead of receiving the
+  structured response normally supplied by an API.
