@@ -244,6 +244,11 @@ Browser-like behavior does not alone establish scraping, and similar symptoms
 do not establish identical implementations. The installed app's authentication
 and the cause of its media failures remain unverified.
 
-The useful next input is its APK/download link or exact patch source and
-version. Do not request account tokens, cookies, or a private app-data export.
-No app or registration was changed.
+The operator confirms they applied the patches on the phone with ReVanced and
+do not have the patch files. Do not require retained patch files or assume there
+is a prepatched download link.
+
+The useful next input is a copy of the installed Sync APK. Its patched code can
+be inspected without changing the installed app or requiring the original patch
+files. Do not request account tokens, cookies, or a private app-data export.
+No phone connection, export, app, or registration was accessed or changed.
