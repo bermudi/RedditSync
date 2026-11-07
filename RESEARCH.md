@@ -371,3 +371,86 @@ cd /tmp/redditsync-installed.ItJo2t && java -Xmx512m \
 
 No replacement APK has been produced, and no media playback or authenticated
 network request was tested.
+
+## Sync patch source availability despite the upstream block
+
+### Verified original repository status
+
+GitHub's repository API for `ReVanced/revanced-patches` returned HTTP 451,
+`Repository access blocked`, with `block.reason` set to `dmca`.
+The response links to:
+
+https://github.com/github/dmca/blob/master/2026/03/2026-03-12-morpheapp.md
+
+The linked notice itself was not analyzed, and no conclusion about the legal
+scope of the notice is made here. The operator's GitLab mirror was not inspected
+because no specific mirror URL was supplied.
+
+### Available source references, not just patch bundles
+
+1. **Patcheddit**, `wchill/patcheddit`: repository metadata and actual directory
+   listings confirm Sync-specific patch definitions under
+   `patches/src/main/kotlin/app/morphe/patches/reddit/customclients/sync/syncforreddit`.
+   Its fixes include login, API lookups, more comments, RedGifs, share links,
+   thumbnails, user endpoints, and video downloads. Runtime Java sources also
+   exist under `extensions/syncforreddit/src/main/java/app/morphe/extension/syncforreddit`.
+
+   https://github.com/wchill/patcheddit
+
+2. **Sync Up**, `RashKash103/sync-up`: its README explicitly describes the initial
+   Sync-only import from Patcheddit as a faithful copy, followed by additional
+   Sync-specific work. That is a maintainer provenance statement, not an
+   independent byte-for-byte comparison. Both the patch definitions and runtime
+   source directories were verified.
+
+   https://github.com/RashKash103/sync-up
+
+   Concrete gallery implementation, verified at tag `v1.9.4`:
+
+   https://github.com/RashKash103/sync-up/blob/v1.9.4/extensions/syncforreddit/src/main/java/app/morphe/extension/syncforreddit/http/posts/FixPostLookupPatch.java
+
+   Shared RedGifs implementation and token manager were also located, after an
+   initial read used the wrong directory and returned HTTP 404. The correct
+   directory includes `shared/library`:
+
+   https://github.com/RashKash103/sync-up/tree/v1.9.4/extensions/shared/library/src/main/java/app/morphe/extension/shared/fixes/redgifs
+
+3. **Community ReVanced-compatible Sync source**,
+   `TheLastWallaby/revanced-redditsync`: its README targets the same original
+   free Sync version, `v23.06.30-13:39`, and says official Sync patches are
+   included from its version 0.7.0 onward. Directory listings confirm
+   `src/patches/OfficialSyncPatches.kt`, `SyncCompatPatches.kt`, and Sync runtime
+   Java classes, including RedGifs and video-download helpers.
+
+   https://github.com/TheLastWallaby/revanced-redditsync
+
+   https://github.com/TheLastWallaby/revanced-redditsync/blob/main/src/patches/OfficialSyncPatches.kt
+
+   This is an unofficial compatibility project, not an authenticated copy of the
+   exact historical ReVanced bundle installed on the operator's phone. Its
+   README explicitly says Manager-side patching is not maintainer-tested.
+
+GitHub metadata identifies all three repositories as non-archived and reports
+GPL-3.0 license identifiers. No licensing assessment or code import was performed.
+Two targeted historical-path queries in Patcheddit returned no commits, so no
+claim is made that the original ReVanced history was recovered.
+
+### What this means for the source build
+
+Patch-definition Kotlin describes changes to an APK, while extension Java
+supplies runtime behavior. A source-based repair can translate the relevant
+changes into normal source edits; it does not require keeping a binary patcher
+in ReSync's build process.
+
+One concrete difference was inspected: Sync Up's RedGifs subclass at `v1.9.4`
+adds handling for the removed `/info` request, while the installed APK's subclass
+only installs the inherited interceptor and supplies a user agent. This is
+additional reference logic to examine, not a live diagnosis of every video
+failure.
+
+The exact old patch bundle is therefore not a prerequisite for continuing the
+source-first repair. Existing source references plus the inspected installed APK
+provide code-level evidence. None of these findings proves a repaired APK works.
+
+Only small metadata, source-file, and history reads were made. No clone, patch
+bundle, dependency, or additional APK was downloaded; no app code was changed.

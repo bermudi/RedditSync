@@ -34,5 +34,10 @@
 - Reddit galleries and Imgur albums have separate request paths. Diagnose each
   separately; an Imgur client ID does not fix Reddit gallery lookup.
 - Sync Up is a patch bundle for original Sync APKs, not this renamed ReSync source.
+- The original ReVanced GitHub repository returned HTTP 451 with a DMCA block.
+  Sync source remains available in Patcheddit, Sync Up, and the community project
+  `TheLastWallaby/revanced-redditsync`. See the source inventory in `RESEARCH.md`.
+  Do not call these an authenticated archive of the operator's exact patch release.
+  Inspect runtime extension code as well as patch definitions when porting to source.
 - Do not start SDK, Gradle, dependency, or APK downloads without agreement on
   bandwidth. Do not push or pull on the operator's limited data plan.
