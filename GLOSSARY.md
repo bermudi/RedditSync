@@ -8,10 +8,14 @@
   posts and moderation tools. It does not issue external-app credentials merely
   because a developer signs in.
 - **Endpoint:** A service address for a particular request, such as loading a post.
+- **Installed app:** Reddit's OAuth registration type for an app running on a
+  user's device. A registration alone does not prove that API requests work.
 - **OAuth:** A system for authorizing an app to access an account without giving
   that app the account password.
 - **Patch:** A change applied to an existing app file. Morphe applies patch bundles
   to Android apps.
+- **Redirect URI:** The registered return address used after an OAuth login. The
+  address requested by the app must match its registration.
 - **ReSync:** The unofficial reconstruction in this repository, installed as
   `com.resync.app`. It is not the original developer's Sync release.
 - **SDK:** A software development kit. Android builds need platform files and

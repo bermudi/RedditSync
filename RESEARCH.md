@@ -128,3 +128,22 @@ claims have not been independently verified.
 Possible recovery paths are not guarantees. Installation alone is insufficient:
 feeds, login, Reddit galleries, additional comments, and required media must be
 exercised before describing an APK as working.
+
+## Follow-up: existing application registration
+
+The operator supplied a screenshot showing an existing Reddit application with
+the `installed app` type. Its client ID and account details are deliberately not
+copied into this repository.
+
+This establishes that a registration exists, not that Reddit currently accepts
+its authorization or API requests. The next configuration detail to obtain is
+the registered redirect URI; it was not visible in the screenshot. The Android
+version and installed Sync version, if any, are also still needed.
+
+An existing usable client could support the original Sync patch route without
+first creating a new API registration. Whether it is usable remains unverified.
+The separate Devvit screenshot asks for an automated account; that screen is not
+evidence of an external Android client's OAuth setup.
+
+No app configuration, login, live API request, or build was performed in this
+follow-up.
