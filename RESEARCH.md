@@ -471,3 +471,69 @@ There is a separate final-build gate: the project requires CI-only builds but
 currently prohibits pushes and large downloads. Permission for a feature-branch
 push and the resulting APK download is needed before that validation/delivery
 step. Nothing was pushed, pulled, or built during this launch check.
+
+## Source media first pass: implemented, pending validation
+
+2026-11-07. Branch `repair/source-media-first-pass` (worktree
+`~/build/RedditSync-worktrees/source-media-first-pass`, from `634e300`). Implemented and
+reworked after full lead review; pending validation. No APK was produced; Android
+compilation, the live request chain, and device behavior were NOT run.
+
+Reddit gallery (replaces the `/api/info.json?id=t3_` lookup — the pattern Sync Up's album-fix
+commit reports as refused by Reddit; maintainer-reported evidence, not verified live from this
+machine — see "Album and comment fixes" above):
+
+- `app/src/main/java/com/resync/app/net/oauth/RedditGalleryResponse.java` (new, pure Java +
+  org.json + Gallery + WebsafeUtils): permalink -> `https://oauth.reddit.com/comments/<id>.json?raw_json=1&limit=0&depth=1`
+  (HTTPS reddit.com root/www/old/new only, no userinfo/non-default port, `/r/<sub>/comments/<id>`,
+  `/comments/<id>`, `/gallery/<id>`); thread-array parse into Gallery (items order, `s.mp4` >
+  `s.u` > `s.gif`, HTTPS-only URLs, crosspost-parent metadata fallback, position clamped to the
+  pager's actual last page — 0 for a one-image gallery, imageCount for two or more);
+  `withPosition` rewrites the cached thread array in place.
+- `net/oauth/OAuthGalleryRequest.java`: `buildUrl` delegates to the helper; UTF-8 parse; the old
+  full-response `Logger.verbose` is gone; sanitized `android.util.Log` phase/status/count lines
+  only; malformed -> the existing fixed `VolleyError("Could not load gallery")`; 1-hour cache
+  entry and bearer plumbing unchanged.
+- `ui/activities/media/MultiImageActivity.java` (Reddit-gallery branches only): invalid gallery
+  URL at the request boundary -> `showLoadError()` + sanitized log instead of a crash;
+  `onDestroy` writes the cache position via `RedditGalleryResponse.withPosition` with explicit
+  UTF-8, skips an absent cache entry. Imgur/Tumblr/eroshare branches untouched.
+
+RedGifs (source-level port of the v1.9.4 Sync Up/Patcheddit contract, evidence in
+`~/reports/redditsync-source-first-pass/evidence/syncup-v1.9.4/` at commit `07dd9b1`; no Sync Up
+class or interceptor framework was copied): the `/ifr` embed-page HTML scraper is removed.
+
+- `net/thirdparty/RedgifsApi.java` (new, pure java.net/java.util): TOKEN_URL
+  `https://api.redgifs.com/v2/auth/temporary`; `metadataUrl` (root/www/m `/watch|/ifr` ->
+  `https://api.redgifs.com/v2/gifs/<lowercase-id>`); `headers` (UA passed through, Accept json,
+  optional Bearer with token validation); `mediaUrl` (HTTPS redgifs.com/subdomain, `.mp4` path,
+  exact API URL preserved, hd/sd fallback both directions); `shouldRefresh` (401/403 once only).
+- `net/thirdparty/RedgifsResponse.java` (new, org.json boundary): required string `token`;
+  required `gif.urls.hd/sd` -> `mediaUrl`; HTML-only responses fail explicitly.
+- `net/thirdparty/RedgifTokenRequest.java` (new) + `GrabRedgifRequest.java` (rewritten): token
+  fetch (no disk cache, zero automatic retries) then metadata GET with the same UA and Bearer;
+  exactly one token refresh on a first 401/403, not delivered to the caller mid-chain; every
+  other failure terminal, delivered once.
+- `net/OAuthRequestManager.sendRedgif`: validates the link, captures
+  `AccountSingleton.getUserAgent()` and `preferHd = forceHd || !DataSavingHelper.shouldSaveData()`,
+  starts the token chain; invalid link -> fixed VolleyError to the caller.
+- `net/thirdparty/RedgifRequestWrapper.java`: dead token/userAddr state removed; fields final.
+  No shared token cache this pass: each resolution mints one short-lived token (documented extra
+  small request).
+
+Offline regression checks (new, no JUnit/Gradle): `tests/media/RedgifsApiTest.java`,
+`tests/media/GalleryJsonTest.java`, `scripts/test-media.sh` (modes `redgifs`/`gallery`; the
+script deletes nothing and leaves its private temp compile dir in place, printing the path).
+Results on this machine after the rework pass (full outputs under
+`~/reports/redditsync-source-first-pass/evidence/rework-checks/`): redgifs 64 passed / 0 failed
+(exit 0); gallery BLOCKED exit 3 — no real org.json runtime exists locally (verified absent in
+`~/Android/Sdk/cmdline-tools` jars, see the follow-up discovery), so the gallery/JSON tests and
+their compilation are NOT verified here; `bash -n` clean; `git diff --check` clean; shellcheck
+clean. The gallery-mode jar check only preflights that org.json classes are listed; executing
+the tests is what proves the runtime (an SDK stub jar fails there). Helper-level tests do not
+evidence Android/Volley compilation, live endpoints, or device behavior.
+
+Still unresolved, by scope: Imgur albums remain blocked on the placeholder `Client-ID
+YOUR_IMGUR_CLIENT_ID` (gallery, single-image, upload requests) — an operator credential decision;
+v.redd.it playback failures still lack evidence (player internals untouched this pass);
+authentication and WebSessionManager untouched; comments untouched.

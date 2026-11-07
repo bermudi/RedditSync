@@ -95,3 +95,25 @@ this is unused — you can leave the placeholder as-is.
 The original app's `google-services.json` and Firebase keys are intentionally absent. The Firebase
 backend (push, remote config, "Ultra" cloud) is dead, and the app runs fine without it. You do **not**
 need to add Firebase config to build or use ReSync.
+
+---
+
+## Offline media checks (no Gradle)
+
+`scripts/test-media.sh` runs offline regression mains from `tests/media/` against the real source
+helpers; it never builds the app or touches a device.
+
+```bash
+scripts/test-media.sh redgifs   # pure RedGifs protocol rules; needs only a JDK
+scripts/test-media.sh gallery   # gallery/RedGifs JSON helpers; needs a real org.json runtime
+```
+
+The `gallery` mode requires `JSON_JAR` to point at a jar containing a **working `org.json`
+runtime for the JVM** (implementation classes, e.g. the `org.json:json` artifact). An Android
+SDK `android.jar` does **not** work: it holds API **stub** classes whose methods just throw, not
+a runnable implementation, so tests would fail at execution. The script only preflights that
+`org/json/JSONObject.class` and `org/json/JSONArray.class` are listed in the jar; actual
+execution is what proves the runtime works. Without a jar the mode prints
+`BLOCKED: real org.json runtime unavailable; gallery/JSON response tests NOT RUN` and exits 3;
+there are no stubs or faked runtimes. Nothing is downloaded, no build artifacts land in the
+repository, and the private temp compile dir is printed and left in place (nothing is deleted).

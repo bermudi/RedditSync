@@ -41,3 +41,12 @@
   Inspect runtime extension code as well as patch definitions when porting to source.
 - Do not start SDK, Gradle, dependency, or APK downloads without agreement on
   bandwidth. Do not push or pull on the operator's limited data plan.
+- Reddit gallery media is fetched from the thread endpoint via
+  `net/oauth/RedditGalleryResponse`; the media cache stores a thread JSON array with a
+  `position` int on the first listing object, not the old `/api/info` object. RedGifs
+  temporary-token and gif-metadata requests must carry the same User-Agent
+  (`RedgifsApi.headers`); tokens are per-resolution and never cached or logged. Never log
+  tokens, raw media/token responses, or full media URLs; media boundaries log fixed
+  phase/status/count messages via `android.util.Log`.
+- `scripts/test-media.sh` offline checks verify pure helper contracts only. They cannot
+  stand in for Android/Volley compilation, live endpoint behavior, or device evidence.

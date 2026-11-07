@@ -1,13 +1,18 @@
 package com.resync.app.net;
 
 import android.content.Context;
+import android.util.Log;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
+import com.android.volley.VolleyError;
 import com.resync.app.RedditApplication;
+import com.resync.app.helpers.DataSavingHelper;
 import com.resync.app.net.oauth.OAuthTempTokenExchangeRequest;
 import com.resync.app.net.oauth.OAuthTokenExchangeRequest;
-import com.resync.app.net.thirdparty.GrabRedgifRequest;
 import com.resync.app.net.thirdparty.RedgifRequestWrapper;
+import com.resync.app.net.thirdparty.RedgifsApi;
+import com.resync.app.net.thirdparty.RedgifTokenRequest;
+import com.resync.app.singleton.AccountSingleton;
 import com.resync.app.util.Logger;
 import com.resync.app.util.TextUtils;
 import com.resync.app.net.RedditRequest;
@@ -103,10 +108,20 @@ public final class OAuthRequestManager {
     }
 
     public static synchronized void sendRedgif(RedgifRequestWrapper redgifRequestWrapper) {
-        // ReSync: RedGifs' JSON API stopped returning direct hd/sd URLs (only an iframe link), which
-        // broke the old token -> IP -> gif chain. GrabRedgifRequest now resolves the MP4 from the public
-        // /ifr embed page in a single request, so no OAuth token or IP-lookup step is needed.
-        RedditApplication.thirdPartyRequestQueue.add(new GrabRedgifRequest(redgifRequestWrapper));
+        // RedGifs v2 protocol: validate the public link, mint a short-lived temporary token with the
+        // app's user agent, then request /v2/gifs/<id> metadata with that same agent and read
+        // gif.urls.hd/sd. Each resolution mints its own token (one extra small request) instead of
+        // caching IP-bound token state; revisit a shared cache only with device evidence.
+        try {
+            String metadataUrl = RedgifsApi.metadataUrl(redgifRequestWrapper.getGifUrl());
+            String userAgent = AccountSingleton.getUserAgent();
+            boolean preferHd = redgifRequestWrapper.isForceHd() || !DataSavingHelper.shouldSaveData();
+            RedditApplication.thirdPartyRequestQueue.add(
+                new RedgifTokenRequest(redgifRequestWrapper, metadataUrl, userAgent, preferHd, false));
+        } catch (IllegalArgumentException e) {
+            Log.w("RedgifsMedia", "redgifs link rejected");
+            redgifRequestWrapper.deliverError(new VolleyError("Invalid RedGifs link"));
+        }
     }
 
     public static void enqueueDirect(RedditRequest redditRequest) {

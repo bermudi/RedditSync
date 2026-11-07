@@ -3,19 +3,17 @@ package com.resync.app.net.thirdparty;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 
-/* JADX INFO: renamed from: t8.d */
-/* JADX INFO: compiled from: RedgifRequestWrapper.java */
-/* JADX INFO: loaded from: classes.dex */
+/**
+ * Carries one RedGifs resolution across the token and metadata request chain. The short-lived
+ * token stays inside the chain (request-local), so nothing token-shaped is stored here.
+ */
 public class RedgifRequestWrapper {
 
-    public String gifUrl;
-    public boolean forceHd;
-    public String token;
-    public String userAddr;
+    public final String gifUrl;
+    public final boolean forceHd;
 
-    public Response.Listener<String> responseListener;
-
-    public Response.ErrorListener errorListener;
+    private final Response.Listener<String> responseListener;
+    private final Response.ErrorListener errorListener;
 
     public RedgifRequestWrapper(String str, boolean forceHd, Response.Listener<String> listener, Response.ErrorListener errorListener) {
         this.gifUrl = str;
@@ -38,16 +36,8 @@ public class RedgifRequestWrapper {
         }
     }
 
-    public String getToken() {
-        return this.token;
-    }
-
     public Response.ErrorListener getErrorListener() {
         return this.errorListener;
-    }
-
-    public String getUserAddr() {
-        return this.userAddr;
     }
 
     public boolean isForceHd() {
@@ -56,13 +46,5 @@ public class RedgifRequestWrapper {
 
     public String getGifUrl() {
         return this.gifUrl;
-    }
-
-    public void setToken(String str) {
-        this.token = str;
-    }
-
-    public void setUserAddr(String str) {
-        this.userAddr = str;
     }
 }

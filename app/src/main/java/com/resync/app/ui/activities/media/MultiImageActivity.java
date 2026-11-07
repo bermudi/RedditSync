@@ -3,6 +3,7 @@ package com.resync.app.ui.activities.media;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Parcelable;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -48,9 +49,13 @@ import com.resync.app.util.Logger;
 import com.resync.app.util.TextUtils;
 import com.resync.app.util.links.LinkTypeHelper;
 import com.resync.app.net.oauth.OAuthGalleryRequest;
+import com.resync.app.net.oauth.RedditGalleryResponse;
+import java.nio.charset.StandardCharsets;
 
 /* JADX INFO: loaded from: classes.dex */
 public class MultiImageActivity extends AbstractImageActivity {
+
+    private static final String LOG_TAG = "MultiImageActivity";
 
     private ImagePagerAdapter pagerAdapter;
     private String[] urls;
@@ -423,7 +428,12 @@ public class MultiImageActivity extends AbstractImageActivity {
         }
         if (!ImgurImageHelper.isMultiImage(getContentUrl())) {
             if (LinkTypeHelper.isGallery(getContentUrl())) {
-                OAuthRequestManager.sendWithAppContext(new OAuthGalleryRequest(getContentUrl(), new OAuthGalleryListener(), new OAuthGalleryErrorListener()));
+                try {
+                    OAuthRequestManager.sendWithAppContext(new OAuthGalleryRequest(getContentUrl(), new OAuthGalleryListener(), new OAuthGalleryErrorListener()));
+                } catch (IllegalArgumentException e) {
+                    Log.w(LOG_TAG, "gallery url rejected");
+                    showLoadError();
+                }
                 return;
             } else {
                 ImgurGalleryHelper.load(getContentUrl(), new ImgurGalleryListener(), new ImgurGalleryErrorListener());
@@ -525,16 +535,14 @@ public class MultiImageActivity extends AbstractImageActivity {
                 if (LinkTypeHelper.isGallery(getContentUrl())) {
                     try {
                         int currentItem = this.mViewPager.getCurrentItem();
-                        Cache.Entry entry2 = RedditApplication.oauthRequestQueue.getCache().get(OAuthGalleryRequest.buildUrl(getContentUrl()));
-                        JSONObject jSONObject2 = new JSONObject(new String(entry2.data));
-                        if (jSONObject2.has("position")) {
-                            jSONObject2.remove("position");
+                        String cacheKey = OAuthGalleryRequest.buildUrl(getContentUrl());
+                        Cache.Entry entry2 = RedditApplication.oauthRequestQueue.getCache().get(cacheKey);
+                        if (entry2 != null) {
+                            entry2.data = RedditGalleryResponse.withPosition(new String(entry2.data, StandardCharsets.UTF_8), currentItem).getBytes(StandardCharsets.UTF_8);
+                            RedditApplication.oauthRequestQueue.getCache().put(cacheKey, entry2);
                         }
-                        jSONObject2.put("position", currentItem);
-                        entry2.data = jSONObject2.toString().getBytes();
-                        RedditApplication.oauthRequestQueue.getCache().put(OAuthGalleryRequest.buildUrl(getContentUrl()), entry2);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        Log.w(LOG_TAG, "gallery position save failed");
                     }
                 }
                 if (getContentUrl().contains("eroshare")) {
