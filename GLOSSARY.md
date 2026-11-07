@@ -2,6 +2,8 @@
 
 - **APK:** The Android file that installs an app.
 - **API:** An interface an app uses to request data or perform actions on a service.
+- **Access token:** A private credential sent with requests to authorize access.
+  It is distinct from a public client ID. Never share it in chat or logs.
 - **Client ID:** A public identifier for a registered API application. It is not a
   password and does not, by itself, grant permission to use another app's access.
 - **Devvit:** Reddit's platform for apps hosted on Reddit, such as interactive

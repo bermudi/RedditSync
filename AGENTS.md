@@ -11,6 +11,10 @@
   without testing them on a device.
 - `WebSessionManager` changes authentication, not the app's dependency on Reddit
   endpoints. Browser-derived tokens are not proof of approved API access.
+- Do not infer an installed patched app's authentication from its ReVanced label
+  or a separate app-registration screenshot. Identify its patch source/version
+  or inspect the APK. Website-session authentication and website scraping are
+  different mechanisms; one does not establish the other.
 - Reddit galleries and Imgur albums have separate request paths. Diagnose each
   separately; an Imgur client ID does not fix Reddit gallery lookup.
 - Sync Up is a patch bundle for original Sync APKs, not this renamed ReSync source.

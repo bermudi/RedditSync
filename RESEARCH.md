@@ -217,3 +217,33 @@ and one failing video post. Their actual media hosts are not yet known.
 
 No APK was built, downloaded, patched, installed, or tested in this follow-up.
 No account credentials were requested or used.
+
+## Correction: installed ReVanced build's authentication is unknown
+
+The operator clarifies that their installed ReVanced-patched Sync does not use
+their Reddit app token and suspects it uses a browser-style mechanism. Do not
+treat the separate app registration as a dependency of this installed build.
+The exact meaning of "app token" (public client ID versus private access token)
+has not been independently established; no token value is needed.
+
+The installed patch source, patch version, and APK have not been identified or
+inspected. Generic patch documentation does not establish what that binary does.
+A targeted GitHub code search for the Sync spoof-client patch in the current
+official ReVanced repository returned no matches. It did not identify the
+operator's installed patches or prove that a historical/forked patch is absent.
+Hosted web-search tool discovery again returned no available tool.
+
+Keep these mechanisms separate:
+
+- Website-session authentication can obtain browser-derived credentials and
+  still request structured API data.
+- Website scraping reads page content and reconstructs app data. ReSync 1.0.9's
+  comments fallback demonstrably does this, with incomplete media fields.
+
+Browser-like behavior does not alone establish scraping, and similar symptoms
+do not establish identical implementations. The installed app's authentication
+and the cause of its media failures remain unverified.
+
+The useful next input is its APK/download link or exact patch source and
+version. Do not request account tokens, cookies, or a private app-data export.
+No app or registration was changed.
