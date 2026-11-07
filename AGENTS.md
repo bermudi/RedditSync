@@ -1,6 +1,14 @@
 # ReSync repository notes
 
 - Define project-specific terms in `GLOSSARY.md` before using them.
+- The operator's goal is a personally maintained, editable source build of Sync,
+  including future feature changes. Do not substitute a patched original APK as
+  the end product. Use original APK inspection and patch sources as references
+  for source-level fixes. Keep the installed original client as a fallback.
+- ReSync 1.0.9's failure is evidence against its current implementation, not
+  evidence that a source-based reconstruction is infeasible. Authentication
+  strategy still needs verification and an explicit decision; do not silently
+  copy a different app's client identity into the source build.
 - `RESEARCH.md` records the November 7, 2026 access-policy and recovery findings.
   Re-check dated external policies before treating them as current.
 - README and BUILD status statements are upstream claims, not local test evidence.

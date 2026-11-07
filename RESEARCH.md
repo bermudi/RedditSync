@@ -9,6 +9,17 @@ There is evidence of current fixes for Sync's album and additional-comment error
 There is no verified working APK from this checkout yet. A personal-use app does not
 automatically qualify for approved Reddit API access.
 
+The operator has clarified the intended product: a working, personally
+maintained source build that can be changed and extended later. A newly patched
+original APK is not the desired end product. Earlier recommendations to prefer
+binary patching optimized for short-term recovery and missed that goal.
+
+Original APK inspection and external patch sources remain useful references for
+source-level repairs. The 1.0.9 defects do not demonstrate that the reconstruction
+approach itself cannot work. No change of authentication strategy, transplant of
+another app's identity, source implementation, or replacement install has been
+approved or performed in this clarification.
+
 ## Reddit access
 
 - Sync was discontinued after Reddit's 2023 API pricing changes. This historical
@@ -212,10 +223,11 @@ Sources:
 2. https://github.com/RashKash103/sync-up/blob/v1.9.4/README.md
 3. https://github.com/RashKash103/sync-up/blob/v1.9.4/patches/src/main/kotlin/app/morphe/patches/reddit/customclients/sync/syncforreddit/api/SpoofClientPatch.kt
 
-Recommendation, not an implemented change: keep the existing install intact and
-evaluate a patched original Sync before investing further in reconstructed
-ReSync. Identify the original Sync version/variant and obtain one failing gallery
-and one failing video post. Their actual media hosts are not yet known.
+Earlier recommendation, now superseded by the clarified source-maintenance goal:
+keep the existing install intact and evaluate a patched original Sync before
+investing further in reconstructed ReSync. This was not implemented. The working
+installed app remains useful as a fallback and behavior reference, not the
+intended final product.
 
 No APK was built, downloaded, patched, installed, or tested in this follow-up.
 No account credentials were requested or used.
