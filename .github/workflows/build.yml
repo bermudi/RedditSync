@@ -24,7 +24,17 @@ jobs:
       - name: Install SDK platform and build tools
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;34.0.0" >/dev/null
 
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.RESYNC_KEYSTORE_B64 }}
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "RESYNC_KEYSTORE_B64 secret missing" >&2; exit 1; }
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/resync-release.jks"
+
       - name: Build
+        env:
+          RESYNC_KEYSTORE: ${{ runner.temp }}/resync-release.jks
+          RESYNC_KEYSTORE_PASSWORD: ${{ secrets.RESYNC_KEYSTORE_PASSWORD }}
         run: ./gradlew assembleDebug assembleRelease --stacktrace --no-daemon
 
       - uses: actions/upload-artifact@v4

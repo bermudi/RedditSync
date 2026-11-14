@@ -15,6 +15,19 @@ android {
         multiDexEnabled true
     }
 
+    // CI signs every build with one fixed personal key (from repo secrets) so new APKs
+    // update in place and keep the login. Local builds without it use the normal debug key.
+    signingConfigs {
+        debug {
+            if (System.getenv('RESYNC_KEYSTORE')) {
+                storeFile file(System.getenv('RESYNC_KEYSTORE'))
+                storePassword System.getenv('RESYNC_KEYSTORE_PASSWORD')
+                keyAlias 'resync'
+                keyPassword System.getenv('RESYNC_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Non-debuggable so the Android-15 "debuggable app / 16 KB" warning dialog
