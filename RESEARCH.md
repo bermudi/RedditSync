@@ -630,3 +630,15 @@ for non-browser clients and can block for the browser session too. It is not a
 stable base. The operator's own `installed app` registration (see "Follow-up:
 existing application registration") would use Sync's original native OAuth flow;
 whether Reddit accepts it now is untested.
+
+## Data API shutdown announcement (checked 2026-11-14)
+
+Press coverage (Decrypt, TechRepublic, MediaPost, bigideasdb) reports a Reddit
+announcement from about October 2026: no new public API access requests after
+October 31, 2026; access removal starts January 12, 2027; remaining public Data
+API access ends March 2027; RSS ended November 13, 2026. Reddit's own changelog
+page returned HTTP 403 to a fetch, so these dates are second-hand and unverified.
+Wikipedia reports a different (November 2026) closure date.
+
+Consequence: any native-API Sync build, including one using the operator's own
+existing registration, has a lifetime of at most a few months.
