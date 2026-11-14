@@ -607,3 +607,26 @@ fixed by this change.
 Proposed next observation, needing operator permission first: read only the already
 sanitized `RedditGallery` status/phase log tag over USB while the operator drives one album
 attempt. No broad log dump, cookies, app data, credentials, or automatic screen driving.
+
+## Emulator test of the website-token build (2026-11-14)
+
+Tested on the local `medium_phone` emulator, operator logged in. Builds `13433d4`
+(token from home page) and `694416d` (thread reads through the WebView).
+
+- Logged out, `/svc/shreddit/token` returned HTTP 500. Logged in, a token POST
+  sent from the `robots.txt` document got the 403 "blocked by network security"
+  page, while the same POST sent from the home page returned a token.
+- With that token: feed, `/api/v1/me`, subreddit listings, `/duplicates` and
+  `about` endpoints returned 200 from a plain HTTP client. `/comments/<id>.json`,
+  `/api/info`, `/api/morechildren` and search returned the 403 block page.
+- From inside the logged-in WebView, `www.reddit.com/comments/<id>.json` first
+  returned 200 JSON. About 25 minutes and roughly 40 probe requests later, every
+  `www.reddit.com/*.json` read and the token POST itself returned 403 from that
+  WebView. The cause (rate, session flag, IP flag) is unknown. The probing may
+  have contributed.
+
+Conclusion: the website-token approach depends on endpoints that Reddit blocks
+for non-browser clients and can block for the browser session too. It is not a
+stable base. The operator's own `installed app` registration (see "Follow-up:
+existing application registration") would use Sync's original native OAuth flow;
+whether Reddit accepts it now is untested.
