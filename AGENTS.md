@@ -39,8 +39,10 @@
   `TheLastWallaby/revanced-redditsync`. See the source inventory in `RESEARCH.md`.
   Do not call these an authenticated archive of the operator's exact patch release.
   Inspect runtime extension code as well as patch definitions when porting to source.
-- Do not start SDK, Gradle, dependency, or APK downloads without agreement on
-  bandwidth. Do not push or pull on the operator's limited data plan.
+- Data limits lifted 2026-11-14: pushes, CI builds, and APK downloads are fine.
+- Device testing runs on the local `medium_phone` Android emulator (operator choice,
+  2026-11-14). Logged-out token minting returns HTTP 500 there, so testing needs the
+  operator to log in inside the emulator. Filter emulator logcat to drop tokens/cookies.
 - Reddit gallery media is fetched from the thread endpoint via
   `net/oauth/RedditGalleryResponse`; the media cache stores a thread JSON array with a
   `position` int on the first listing object, not the old `/api/info` object. RedGifs
