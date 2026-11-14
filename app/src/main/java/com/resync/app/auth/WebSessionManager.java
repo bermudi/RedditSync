@@ -16,6 +16,10 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.resync.app.util.Logger;
 
@@ -62,6 +66,23 @@ public final class WebSessionManager {
         void onToken(String jwt);
         void onError(String reason);
     }
+
+    /** Result of {@link #fetchBlocking}. {@code status} 0 means the fetch itself failed. */
+    public static final class FetchResult {
+        public final int status;
+        public final String contentType;
+        public final String body;
+
+        FetchResult(int status, String contentType, String body) {
+            this.status = status;
+            this.contentType = contentType;
+            this.body = body;
+        }
+    }
+
+    private final AtomicInteger fetchIds = new AtomicInteger();
+    private final ConcurrentHashMap<Integer, CountDownLatch> fetchLatches = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, FetchResult> fetchResults = new ConcurrentHashMap<>();
 
     /** Result of {@link #fetchUsername}; {@code name} is null on any failure. */
     public interface NameCallback {
@@ -213,6 +234,59 @@ public final class WebSessionManager {
         waitForCsrfThenFetch(System.currentTimeMillis(), anonymous ? 15000L : 10000L);
     }
 
+    /** True when the WebView shows a fully loaded reddit.com document that fetches can run in. */
+    private boolean isPageReady() {
+        return webView.getProgress() == 100 && isRedditHost(Uri.parse(String.valueOf(webView.getUrl())));
+    }
+
+    /**
+     * GETs {@code url} (a www.reddit.com URL) from inside the session WebView and returns the
+     * response, or null on timeout. Blocks, so call it only off the main thread.
+     *
+     * <p>Since Nov 2026 reddit's edge answers thread reads ({@code /comments/<id>.json}) from a
+     * plain HTTP client with a 403 "blocked by network security" page, on both oauth.reddit.com
+     * and www.reddit.com. The same read from the browser engine with the session cookies succeeds.
+     */
+    public FetchResult fetchBlocking(final String url, long timeoutMs) {
+        final int id = fetchIds.incrementAndGet();
+        CountDownLatch latch = new CountDownLatch(1);
+        fetchLatches.put(id, latch);
+        final long startMs = System.currentTimeMillis();
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                ensureWebView();
+                if (webView.getUrl() == null) {
+                    webView.loadUrl("https://www.reddit.com/");
+                }
+                if (isPageReady() || System.currentTimeMillis() - startMs >= 10000L) {
+                    runFetch(id, url);
+                } else {
+                    main.postDelayed(this, 400);
+                }
+            }
+        });
+        try {
+            if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                android.util.Log.w(TAG, "Browser fetch " + id + " timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        fetchLatches.remove(id);
+        return fetchResults.remove(id);
+    }
+
+    private void runFetch(int id, String url) {
+        String js =
+            "(function(){var id=" + id + ";"
+          + "fetch(" + JSONObject.quote(url) + ",{credentials:'include',headers:{'Accept':'application/json'}})"
+          + ".then(function(r){return r.text().then(function(t){"
+          + "SyncTokenBridge.onFetchResult(id,r.status,r.headers.get('content-type')||'',t);});})"
+          + ".catch(function(e){SyncTokenBridge.onFetchResult(id,0,'',String(e));});})();";
+        webView.evaluateJavascript(js, null);
+    }
+
     /** Polls the cookie jar for {@code csrf_token}; once present (or on timeout) runs the token fetch. */
     private void waitForCsrfThenFetch(final long startMs, final long timeoutMs) {
         main.postDelayed(new Runnable() {
@@ -221,9 +295,7 @@ public final class WebSessionManager {
                 String cookies = CookieManager.getInstance().getCookie("https://www.reddit.com");
                 boolean haveCsrf = cookies != null && cookies.contains("csrf_token=");
                 // The fetch runs in the current document, so wait until the home page has loaded.
-                boolean pageReady = webView.getProgress() == 100
-                        && isRedditHost(Uri.parse(String.valueOf(webView.getUrl())));
-                if ((haveCsrf && pageReady) || System.currentTimeMillis() - startMs >= timeoutMs) {
+                if ((haveCsrf && isPageReady()) || System.currentTimeMillis() - startMs >= timeoutMs) {
                     runTokenFetch();
                 } else {
                     main.postDelayed(this, 400);
@@ -288,6 +360,17 @@ public final class WebSessionManager {
             main.post(new Runnable() {
                 @Override public void run() { deliver(result); }
             });
+        }
+
+        @JavascriptInterface
+        public void onFetchResult(int id, int status, String contentType, String body) {
+            android.util.Log.i(TAG, "Browser fetch " + id + " -> HTTP " + status + ", " + body.length() + " chars");
+            CountDownLatch latch = fetchLatches.get(id);
+            if (latch == null) {
+                return; // caller already timed out
+            }
+            fetchResults.put(id, new FetchResult(status, contentType, body));
+            latch.countDown();
         }
 
         @JavascriptInterface

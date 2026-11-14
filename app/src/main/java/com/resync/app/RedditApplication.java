@@ -259,7 +259,7 @@ public class RedditApplication extends Application implements Configuration.Prov
         Logger.verbose("Startup time night: " + (System.currentTimeMillis() - startupTime));
         setupCrashlytics();
         mainRequestQueue = Volley.newRequestQueue(this);
-        oauthRequestQueue = Volley.newRequestQueue(this);
+        oauthRequestQueue = Volley.newRequestQueue(this, new com.resync.app.net.WebViewRoutingStack(this));
         bTracker = com.resync.app.net.RequestQueueTracker.attach(mainRequestQueue);
         cTracker = com.resync.app.net.RequestQueueTracker.attach(oauthRequestQueue);
         thirdPartyRequestQueue = Volley.newRequestQueue(this);
