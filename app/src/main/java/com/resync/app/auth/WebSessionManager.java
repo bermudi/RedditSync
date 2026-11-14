@@ -194,8 +194,8 @@ public final class WebSessionManager {
      * POST + cookie attach to work, so we load a reddit.com page first, then fetch once the CSRF
      * cookie is present.
      *
-     * <p>Logged-IN: the session cookies already exist, so a tiny same-origin page (robots.txt) is
-     * enough and the fetch can fire almost immediately.
+     * <p>Logged-IN: the session cookies already exist, but the fetch must still run from an HTML
+     * page; reddit blocks it from robots.txt.
      *
      * <p>Logged-OUT (anonymous): we must load a real HTML page (the home page) so reddit's edge sets
      * the {@code loid}+{@code csrf_token} cookies AND runs its JS bot-challenge (a fresh signed-out
@@ -205,12 +205,12 @@ public final class WebSessionManager {
      */
     private void mintToken() {
         boolean anonymous = !hasSession();
-        // robots.txt is tiny but does NOT run reddit's HTML/JS challenge; for the anonymous bootstrap
-        // we need a real page so the challenge resolves and loid/csrf get set.
-        webView.loadUrl(anonymous ? "https://www.reddit.com/" : "https://www.reddit.com/robots.txt");
-        // Poll for the csrf_token cookie (anon: up to ~15s to ride out the JS challenge; logged-in:
-        // it's already there so this fires on the first tick), then run the same-origin fetch.
-        waitForCsrfThenFetch(System.currentTimeMillis(), anonymous ? 15000L : 4000L);
+        // Always mint from the real home page. Since Nov 2026 reddit's edge answers a token POST
+        // sent from the robots.txt document with a 403 "blocked by network security" page, while
+        // the identical POST from an HTML page succeeds.
+        webView.loadUrl("https://www.reddit.com/");
+        android.util.Log.i(TAG, "Minting token, anonymous=" + anonymous);
+        waitForCsrfThenFetch(System.currentTimeMillis(), anonymous ? 15000L : 10000L);
     }
 
     /** Polls the cookie jar for {@code csrf_token}; once present (or on timeout) runs the token fetch. */
@@ -220,7 +220,10 @@ public final class WebSessionManager {
             public void run() {
                 String cookies = CookieManager.getInstance().getCookie("https://www.reddit.com");
                 boolean haveCsrf = cookies != null && cookies.contains("csrf_token=");
-                if (haveCsrf || System.currentTimeMillis() - startMs >= timeoutMs) {
+                // The fetch runs in the current document, so wait until the home page has loaded.
+                boolean pageReady = webView.getProgress() == 100
+                        && isRedditHost(Uri.parse(String.valueOf(webView.getUrl())));
+                if ((haveCsrf && pageReady) || System.currentTimeMillis() - startMs >= timeoutMs) {
                     runTokenFetch();
                 } else {
                     main.postDelayed(this, 400);
